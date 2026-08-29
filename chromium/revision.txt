@@ -1,0 +1,5 @@
+revision=5f6de63eb46d3cb59d464aab56087ded7c40b557
+version=154.0.8031.0
+validated_at=2026-08-28
+platform=windows-x64
+configuration=out/Atlas

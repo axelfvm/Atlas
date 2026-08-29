@@ -2,16 +2,21 @@
   "name": "atlas-browser",
   "version": "0.1.0",
   "description": "Atlas, um navegador desktop baseado em Chromium.",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/axelfvm/Atlas.git"
+  },
   "main": "src/main.js",
   "author": "Axel",
   "license": "UNLICENSED",
   "private": true,
   "scripts": {
     "start": "electron .",
-    "check": "node --check src/main.js && node --check src/preload.js && node --check src/navigation.js && node --check src/renderer/renderer.js",
+    "check": "node --check src/main.js && node --check src/preload.js && node --check src/navigation.js && node --check src/shortcuts-store.js && node --check src/window-state.js && node --check src/renderer/renderer.js",
     "test": "node --test",
     "pack": "electron-builder --dir",
-    "dist": "electron-builder"
+    "dist": "electron-builder",
+    "release": "electron-builder --win --publish always"
   },
   "devDependencies": {
     "electron": "44.0.0",
@@ -20,6 +25,7 @@
   "build": {
     "appId": "com.axelfvm.atlas",
     "productName": "Atlas",
+    "artifactName": "Atlas-Setup-${version}.${ext}",
     "directories": {
       "output": "release"
     },
@@ -27,14 +33,26 @@
       "src/**/*",
       "package.json"
     ],
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "axelfvm",
+        "repo": "Atlas",
+        "channel": "latest"
+      }
+    ],
     "win": {
       "target": "nsis"
     },
     "nsis": {
       "oneClick": false,
+      "perMachine": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true
     }
+  },
+  "dependencies": {
+    "electron-updater": "6.8.9"
   }
 }

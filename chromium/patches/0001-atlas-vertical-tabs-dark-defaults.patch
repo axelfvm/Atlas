@@ -1,0 +1,73 @@
+diff --git a/chrome/browser/themes/theme_service.cc b/chrome/browser/themes/theme_service.cc
+index 98df89528d0a6..253ed07d7838d 100644
+--- a/chrome/browser/themes/theme_service.cc
++++ b/chrome/browser/themes/theme_service.cc
+@@ -315,7 +315,7 @@ void ThemeService::RegisterProfilePrefs(
+       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+   registry->RegisterIntegerPref(
+       prefs::kBrowserColorScheme,
+-      std::to_underlying(ThemeService::BrowserColorScheme::kSystem));
++      std::to_underlying(ThemeService::BrowserColorScheme::kDark));
+   registry->RegisterIntegerPref(
+       prefs::kDeprecatedUserColorDoNotUse, SK_ColorTRANSPARENT,
+       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+diff --git a/chrome/browser/themes/theme_service_unittest.cc b/chrome/browser/themes/theme_service_unittest.cc
+index 6cce58becfa8d..17f773cdb09c6 100644
+--- a/chrome/browser/themes/theme_service_unittest.cc
++++ b/chrome/browser/themes/theme_service_unittest.cc
+@@ -1025,10 +1025,10 @@ TEST_F(ThemeServiceTest, SetUseDeviceTheme) {
+ }
+ 
+ TEST_F(ThemeServiceTest, SetBrowserColorScheme) {
+-  // Default without anything explicitly set should be kSystem.
++  // Atlas starts new profiles in dark mode.
+   ThemeService::BrowserColorScheme color_scheme =
+       theme_service()->GetBrowserColorScheme();
+-  EXPECT_EQ(color_scheme, ThemeService::BrowserColorScheme::kSystem);
++  EXPECT_EQ(color_scheme, ThemeService::BrowserColorScheme::kDark);
+ 
+   // Set browser color scheme to light mode.
+   theme_service()->SetBrowserColorScheme(
+diff --git a/chrome/browser/ui/tabs/tab_strip_prefs.cc b/chrome/browser/ui/tabs/tab_strip_prefs.cc
+index ca0afc6fd02f5..39b164076047a 100644
+--- a/chrome/browser/ui/tabs/tab_strip_prefs.cc
++++ b/chrome/browser/ui/tabs/tab_strip_prefs.cc
+@@ -24,7 +24,9 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
+   registry->RegisterBooleanPref(prefs::kOrganizerPanelPinnedToTabstrip, true);
+   registry->RegisterBooleanPref(prefs::kEverythingMenuPinnedToTabstrip, true);
+   registry->RegisterBooleanPref(prefs::kTabScrollButtonsPinnedToTabstrip, true);
+-  registry->RegisterBooleanPref(prefs::kVerticalTabsEnabled, false);
++  // Atlas uses the native vertical tab strip as its primary navigation.
++  // Users can still switch back to horizontal tabs from the window menu.
++  registry->RegisterBooleanPref(prefs::kVerticalTabsEnabled, true);
+   registry->RegisterBooleanPref(
+       prefs::kVerticalTabsExpandOnHoverEnabled,
+       tabs::kVerticalTabsExpandOnHoverDefaultEnabled.Get());
+diff --git a/chrome/browser/ui/tabs/vertical_tab_strip_state_controller_unittest.cc b/chrome/browser/ui/tabs/vertical_tab_strip_state_controller_unittest.cc
+index 5d1393a8a8340..c5f5b6fe784ff 100644
+--- a/chrome/browser/ui/tabs/vertical_tab_strip_state_controller_unittest.cc
++++ b/chrome/browser/ui/tabs/vertical_tab_strip_state_controller_unittest.cc
+@@ -53,6 +53,10 @@ class VerticalTabStripStateControllerTest : public testing::Test {
+     testing::Test::SetUp();
+     feature_list_.InitAndEnableFeature(tabs::kVerticalTabsExpandOnHover);
+     tabs::RegisterProfilePrefs(pref_service_.registry());
++    // Most controller tests exercise transitions from Chromium's historical
++    // horizontal-tab state. Keep that fixture explicit even though Atlas uses
++    // vertical tabs for new profiles.
++    pref_service_.SetBoolean(prefs::kVerticalTabsEnabled, false);
+     SessionID test_session_id = SessionID::FromSerializedValue(kSessionIDValue);
+ 
+     EXPECT_CALL(mock_browser_window_interface_, GetUnownedUserDataHost)
+@@ -92,6 +96,12 @@ class VerticalTabStripStateControllerTest : public testing::Test {
+   MockBrowserWindowInterface mock_browser_window_interface_;
+ };
+ 
++TEST(AtlasTabStripPrefsTest, VerticalTabsEnabledByDefault) {
++  sync_preferences::TestingPrefServiceSyncable pref_service;
++  tabs::RegisterProfilePrefs(pref_service.registry());
++  EXPECT_TRUE(pref_service.GetBoolean(prefs::kVerticalTabsEnabled));
++}
++
+ TEST_F(VerticalTabStripStateControllerTest, Initial) {
+   EXPECT_FALSE(controller()->ShouldDisplayVerticalTabs());
+   EXPECT_FALSE(controller()->IsCollapsed());

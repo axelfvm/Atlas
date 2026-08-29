@@ -1,0 +1,11 @@
+# Configuração inicial para desenvolvimento local do Atlas em Windows x64.
+# Codecs proprietários e Widevine não são habilitados por este arquivo.
+
+is_debug = true
+is_component_build = true
+target_cpu = "x64"
+symbol_level = 1
+blink_symbol_level = 0
+v8_symbol_level = 0
+is_chrome_branded = false
+use_official_google_api_keys = false

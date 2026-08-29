@@ -1,0 +1,12 @@
+# Configuração de distribuição Windows x64 do Atlas.
+is_debug = false
+is_component_build = false
+target_cpu = "x64"
+
+# Os símbolos são mantidos fora do pacote público para reduzir o download.
+symbol_level = 0
+blink_symbol_level = 0
+v8_symbol_level = 0
+
+is_chrome_branded = false
+use_official_google_api_keys = false
