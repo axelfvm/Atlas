@@ -1,5 +1,4 @@
-# Configuração inicial para desenvolvimento local do Atlas em Windows x64.
-# Codecs proprietários e Widevine não são habilitados por este arquivo.
+# Configuração para desenvolvimento local do Atlas em Windows x64.
 
 is_debug = true
 is_component_build = true
@@ -9,3 +8,10 @@ blink_symbol_level = 0
 v8_symbol_level = 0
 is_chrome_branded = false
 use_official_google_api_keys = false
+
+# Streaming comercial: H.264/AAC/MP4 e infraestrutura EME/Widevine.
+# "Chrome" aqui e apenas o perfil tecnico de codecs do FFmpeg; o produto
+# continua sendo Atlas e o CDM proprietario nao e incluido neste repositorio.
+proprietary_codecs = true
+ffmpeg_branding = "Chrome"
+enable_widevine = true

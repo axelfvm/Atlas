@@ -3,5 +3,7 @@ dist/
 release/
 artifacts/
 *.log
+__pycache__/
+*.pyc
 .DS_Store
 Thumbs.db

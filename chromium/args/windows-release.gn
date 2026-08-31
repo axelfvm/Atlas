@@ -10,3 +10,10 @@ v8_symbol_level = 0
 
 is_chrome_branded = false
 use_official_google_api_keys = false
+
+# Streaming comercial: H.264/AAC/MP4 e infraestrutura EME/Widevine.
+# "Chrome" aqui e apenas o perfil tecnico de codecs do FFmpeg; o produto
+# continua sendo Atlas e o CDM proprietario nao e incluido neste repositorio.
+proprietary_codecs = true
+ffmpeg_branding = "Chrome"
+enable_widevine = true

@@ -70,6 +70,16 @@ acima do escolhido automaticamente pelo `autoninja` pode deixar o build mais len
 - definir política de versionamento própria;
 - gerar instalador assinado para Windows.
 
+#### Política de versionamento
+
+- Atlas usa SemVer próprio, começando em `0.1.0`;
+- `atlas-version.json` é a fonte de verdade para interface, instalador, releases e atualizador;
+- Chromium mantém sua versão upstream separada como versão do motor;
+- a versão do motor continua sendo usada internamente no User-Agent, compatibilidade,
+  componentes e integrações como Widevine;
+- uma atualização do Atlas pode ou não atualizar o motor Chromium, e essa alteração
+  deve ser registrada nas notas da release.
+
 ### 3. Interface
 
 - implementar barra lateral e guias verticais nativas;

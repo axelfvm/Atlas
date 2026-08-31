@@ -1,0 +1,1603 @@
+diff --git a/chrome/browser/resources/new_tab_page/app.css b/chrome/browser/resources/new_tab_page/app.css
+index 2b3ec5df1f47f..0b183c53c95bc 100644
+--- a/chrome/browser/resources/new_tab_page/app.css
++++ b/chrome/browser/resources/new_tab_page/app.css
+@@ -39,6 +39,18 @@
+   --threads-rail-focus-outline-color: var(--color-new-tab-page-focus-ring);
+ }
+ 
++/* Atlas owns the new-tab surface. Google remains the search provider, while
++ * account links, promotional modules, and browser-customization affordances
++ * stay out of the primary browsing canvas. */
++#oneGoogleBarStackingContext,
++ntp-action-chips,
++ntp-middle-slot-promo,
++ntp-modules,
++ntp-customize-buttons,
++#customizeButtons {
++  display: none !important;
++}
++
+ /**
+  * Hide everything that should not display when the composebox is open
+  * so they are not tabbable.
+@@ -160,9 +172,9 @@ cr-most-visited {
+   align-items: center;
+   display: flex;
+   flex-direction: column;
+-  height: calc(100vh - var(--ntp-one-google-bar-height));
++  height: 100vh;
+   min-width: fit-content; /* Prevents OneGoogleBar cutoff at 500% zoom. */
+-  padding-top: var(--ntp-one-google-bar-height);
++  padding-top: 0;
+   position: relative;
+   z-index: 1;
+ }
+@@ -185,7 +197,7 @@ cr-most-visited {
+ }
+ 
+ #logo {
+-  margin-bottom: var(--ntp-logo-margin-bottom, 38px);
++  margin-bottom: var(--ntp-logo-margin-bottom, 28px);
+ }
+ 
+ :host([show-composebox_]) #logo,
+diff --git a/chrome/browser/resources/new_tab_page/app.html b/chrome/browser/resources/new_tab_page/app.html
+index b74e44b616a27..d65a79ccf4095 100644
+--- a/chrome/browser/resources/new_tab_page/app.html
++++ b/chrome/browser/resources/new_tab_page/app.html
+@@ -120,7 +120,7 @@ import {SubmitButtonIconType} from '//resources/cr_components/composebox/compose
+   ${this.lazyRender_ ? html`
+     ${this.shortcutsEnabled_ ? html`
+       <cr-most-visited id="mostVisited" .theme="${this.theme_?.mostVisited || null}"
+-          single-row reflow-on-overflow
++          single-row reflow-on-overflow custom-links-only
+           ?expandable-tiles-enabled="${this.ntpNextFeaturesEnabled_}"
+           max-tiles-in-collapsed-state="${this.maxTilesInCollapsedState_}"
+           max-shortcuts-in-expanded-state="${this.maxShortcutsInExpandedState_}"
+diff --git a/chrome/browser/resources/new_tab_page/icons/BUILD.gn b/chrome/browser/resources/new_tab_page/icons/BUILD.gn
+index bbf96df376b90..3bdcfdf3dd9e2 100644
+--- a/chrome/browser/resources/new_tab_page/icons/BUILD.gn
++++ b/chrome/browser/resources/new_tab_page/icons/BUILD.gn
+@@ -12,6 +12,7 @@ generate_grd("build_grdp") {
+   grd_prefix = "new_tab_page"
+   out_grd = "$target_gen_dir/resources.grdp"
+   input_files = [
++    "atlas_logo.svg",
+     "attach_file.svg",
+     "banana.svg",
+     "bolt.svg",
+diff --git a/chrome/browser/resources/new_tab_page/logo.css b/chrome/browser/resources/new_tab_page/logo.css
+index 29e9b0470e00f..d104616deb912 100644
+--- a/chrome/browser/resources/new_tab_page/logo.css
++++ b/chrome/browser/resources/new_tab_page/logo.css
+@@ -10,7 +10,7 @@
+  * #css_wrapper_metadata_end */
+ 
+ :host {
+-  --ntp-logo-height: 168px;
++  --ntp-logo-height: 190px;
+   display: flex;
+   flex-direction: column;
+   flex-shrink: 0;
+@@ -32,26 +32,48 @@
+ 
+ #logo {
+   forced-color-adjust: none;
++  background-image: url(./icons/atlas_logo.svg);
++  background-position: center;
++  background-repeat: no-repeat;
++  background-size: contain;
+   height: 92px;
+-  width: 272px;
++  width: 92px;
+ }
+ 
+ :host([use-google-logo26_]) #logo {
+-  height: 82px;
+-  width: 270px;
++  height: 92px;
++  width: 92px;
+ }
+ 
+ :host([single-colored]) #logo {
+-  -webkit-mask-image: url(./icons/google_logo.svg);
+-  -webkit-mask-repeat: no-repeat;
+-  -webkit-mask-size: 100%;
+-  background-color: var(--ntp-logo-color);
++  -webkit-mask-image: none;
+ }
+ 
+ :host(:not([single-colored])) #logo {
+-  background-image: url(./icons/google_logo.svg);
+-  background-repeat: no-repeat;
+-  background-size: 100%;
++  background-image: url(./icons/atlas_logo.svg);
++}
++
++#atlasBrand {
++  align-items: center;
++  display: flex;
++  flex-direction: column;
++  font-family: Inter, 'Segoe UI', sans-serif;
++}
++
++#wordmark {
++  color: var(--color-new-tab-page-primary-foreground);
++  font-size: 34px;
++  font-weight: 600;
++  letter-spacing: -1px;
++  line-height: 40px;
++  margin-top: 8px;
++}
++
++#tagline {
++  color: var(--color-new-tab-page-secondary-foreground);
++  font-size: 14px;
++  line-height: 20px;
++  margin-top: 2px;
+ }
+ 
+ :host([doodle-boxed_]:not([show-tight-doodle-boxing_])) #imageDoodle {
+diff --git a/chrome/browser/resources/new_tab_page/logo.html b/chrome/browser/resources/new_tab_page/logo.html
+index 90a4dd43966aa..b56c173935e1f 100644
+--- a/chrome/browser/resources/new_tab_page/logo.html
++++ b/chrome/browser/resources/new_tab_page/logo.html
+@@ -1,5 +1,9 @@
+ ${this.showLogo_ ? html`
+-  <div id="logo"></div>
++  <div id="atlasBrand" aria-label="Atlas">
++    <div id="logo"></div>
++    <div id="wordmark">Atlas</div>
++    <div id="tagline">O navegador que aponta o caminho.</div>
++  </div>
+ ` : ''}
+ ${this.showDoodle_ ? html`
+   <div id="doodle">
+diff --git a/chrome/browser/ui/accelerator_table.cc b/chrome/browser/ui/accelerator_table.cc
+index 532ec4748b885..2266a7f454fed 100644
+--- a/chrome/browser/ui/accelerator_table.cc
++++ b/chrome/browser/ui/accelerator_table.cc
+@@ -268,6 +268,11 @@ const AcceleratorMapping kTabGroupAcceleratorMap[] = {
+     {ui::VKEY_P, ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN, IDC_CREATE_NEW_TAB_GROUP},
+     {ui::VKEY_X, ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN, IDC_FOCUS_NEXT_TAB_GROUP},
+     {ui::VKEY_Z, ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN, IDC_FOCUS_PREV_TAB_GROUP},
++    // Atlas workspace shortcuts, aligned with the vertical-workspace flow.
++    {ui::VKEY_E, ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN,
++     IDC_FOCUS_NEXT_TAB_GROUP},
++    {ui::VKEY_Q, ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN,
++     IDC_FOCUS_PREV_TAB_GROUP},
+     {ui::VKEY_W, ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN, IDC_CLOSE_TAB_GROUP},
+ };
+ #endif  // !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_CHROMEOS)
+diff --git a/chrome/browser/ui/ui_features.cc b/chrome/browser/ui/ui_features.cc
+index bb4396f330b0f..9678ceb855769 100644
+--- a/chrome/browser/ui/ui_features.cc
++++ b/chrome/browser/ui/ui_features.cc
+@@ -365,7 +365,16 @@ BASE_FEATURE_PARAM(bool,
+ BASE_FEATURE(kWebUIAvatarButton, base::FEATURE_DISABLED_BY_DEFAULT);
+ BASE_FEATURE(kWebUIMediaButton, base::FEATURE_DISABLED_BY_DEFAULT);
+ 
++// Atlas composes the real navigation controls and omnibox inside its vertical
++// sidebar. The experimental Chromium WebUI toolbar is a single horizontal
++// surface and cannot be split into the two sidebar rows without duplicating
++// browser state, so keep the native Views controls authoritative.
++constexpr bool kAtlasUsesNativeSidebarToolbar = true;
++
+ bool IsWebUIReloadButtonEnabled() {
++  if (kAtlasUsesNativeSidebarToolbar) {
++    return false;
++  }
+   return !IsProcessOverheadExperimentActive() &&
+          base::FeatureList::IsEnabled(features::kInitialWebUI) &&
+          (base::FeatureList::IsEnabled(features::kWebUIToolbar) ||
+@@ -373,6 +382,9 @@ bool IsWebUIReloadButtonEnabled() {
+ }
+ 
+ bool IsWebUIHomeButtonEnabled() {
++  if (kAtlasUsesNativeSidebarToolbar) {
++    return false;
++  }
+   return !IsProcessOverheadExperimentActive() &&
+          base::FeatureList::IsEnabled(features::kInitialWebUI) &&
+          (base::FeatureList::IsEnabled(features::kWebUIToolbar) ||
+@@ -380,6 +392,9 @@ bool IsWebUIHomeButtonEnabled() {
+ }
+ 
+ bool IsWebUIBatterySaverButtonEnabled() {
++  if (kAtlasUsesNativeSidebarToolbar) {
++    return false;
++  }
+   return !IsProcessOverheadExperimentActive() &&
+          base::FeatureList::IsEnabled(features::kInitialWebUI) &&
+          (base::FeatureList::IsEnabled(features::kWebUIToolbar) ||
+@@ -387,6 +402,9 @@ bool IsWebUIBatterySaverButtonEnabled() {
+ }
+ 
+ bool IsWebUIAppMenuButtonEnabled() {
++  if (kAtlasUsesNativeSidebarToolbar) {
++    return false;
++  }
+   return !IsProcessOverheadExperimentActive() &&
+          base::FeatureList::IsEnabled(features::kInitialWebUI) &&
+          (base::FeatureList::IsEnabled(features::kWebUIToolbar) ||
+@@ -394,6 +412,9 @@ bool IsWebUIAppMenuButtonEnabled() {
+ }
+ 
+ bool IsWebUIBackForwardButtonEnabled() {
++  if (kAtlasUsesNativeSidebarToolbar) {
++    return false;
++  }
+   return !IsProcessOverheadExperimentActive() &&
+          base::FeatureList::IsEnabled(features::kInitialWebUI) &&
+          (base::FeatureList::IsEnabled(features::kWebUIToolbar) ||
+@@ -401,6 +422,9 @@ bool IsWebUIBackForwardButtonEnabled() {
+ }
+ 
+ bool IsWebUIPinnedToolbarActionsEnabled() {
++  if (kAtlasUsesNativeSidebarToolbar) {
++    return false;
++  }
+   return !IsProcessOverheadExperimentActive() &&
+          base::FeatureList::IsEnabled(features::kInitialWebUI) &&
+          (base::FeatureList::IsEnabled(features::kWebUIToolbar) ||
+@@ -408,6 +432,9 @@ bool IsWebUIPinnedToolbarActionsEnabled() {
+ }
+ 
+ bool IsWebUIExtensionsContainerEnabled() {
++  if (kAtlasUsesNativeSidebarToolbar) {
++    return false;
++  }
+   return !IsProcessOverheadExperimentActive() &&
+          base::FeatureList::IsEnabled(features::kInitialWebUI) &&
+          (base::FeatureList::IsEnabled(features::kWebUIToolbar) ||
+@@ -415,6 +442,9 @@ bool IsWebUIExtensionsContainerEnabled() {
+ }
+ 
+ bool IsWebUISplitTabsButtonEnabled() {
++  if (kAtlasUsesNativeSidebarToolbar) {
++    return false;
++  }
+   return !IsProcessOverheadExperimentActive() &&
+          base::FeatureList::IsEnabled(features::kInitialWebUI) &&
+          (base::FeatureList::IsEnabled(features::kWebUIToolbar) ||
+@@ -422,6 +452,9 @@ bool IsWebUISplitTabsButtonEnabled() {
+ }
+ 
+ bool IsWebUIAvatarButtonEnabled() {
++  if (kAtlasUsesNativeSidebarToolbar) {
++    return false;
++  }
+   return !IsProcessOverheadExperimentActive() &&
+          base::FeatureList::IsEnabled(features::kInitialWebUI) &&
+          (base::FeatureList::IsEnabled(features::kWebUIToolbar) ||
+@@ -429,6 +462,9 @@ bool IsWebUIAvatarButtonEnabled() {
+ }
+ 
+ bool IsWebUIMediaButtonEnabled() {
++  if (kAtlasUsesNativeSidebarToolbar) {
++    return false;
++  }
+   return !IsProcessOverheadExperimentActive() &&
+          base::FeatureList::IsEnabled(features::kInitialWebUI) &&
+          (base::FeatureList::IsEnabled(features::kWebUIToolbar) ||
+@@ -436,6 +472,9 @@ bool IsWebUIMediaButtonEnabled() {
+ }
+ 
+ bool IsWebUIPerformanceInterventionButtonEnabled() {
++  if (kAtlasUsesNativeSidebarToolbar) {
++    return false;
++  }
+   return !IsProcessOverheadExperimentActive() &&
+          base::FeatureList::IsEnabled(features::kInitialWebUI) &&
+          (base::FeatureList::IsEnabled(features::kWebUIToolbar) ||
+@@ -444,6 +483,9 @@ bool IsWebUIPerformanceInterventionButtonEnabled() {
+ }
+ 
+ bool IsWebUILocationBarEnabled() {
++  if (kAtlasUsesNativeSidebarToolbar) {
++    return false;
++  }
+   return !IsProcessOverheadExperimentActive() &&
+          base::FeatureList::IsEnabled(features::kInitialWebUI) &&
+          (base::FeatureList::IsEnabled(features::kWebUIToolbar) ||
+@@ -509,7 +551,10 @@ BASE_FEATURE_PARAM(std::string,
+ BASE_FEATURE(kAiOverlayDisableNavigationContext,
+              base::FEATURE_DISABLED_BY_DEFAULT);
+ 
+-BASE_FEATURE(kTabGroupsFocusing, base::FEATURE_DISABLED_BY_DEFAULT);
++// Atlas uses focused tab groups as the native backing store for workspaces.
++// Pinned tabs remain global while regular tabs outside the active workspace
++// are hidden, which matches the sidebar workspace model.
++BASE_FEATURE(kTabGroupsFocusing, base::FEATURE_ENABLED_BY_DEFAULT);
+ 
+ BASE_FEATURE_PARAM(bool, kTabGroupsFocusFreezing, &kTabGroupsFocusing, true);
+ 
+diff --git a/chrome/browser/ui/views/frame/browser_caption_button_container_win.cc b/chrome/browser/ui/views/frame/browser_caption_button_container_win.cc
+index d0f0f711eaa58..e61bbcef96fa4 100644
+--- a/chrome/browser/ui/views/frame/browser_caption_button_container_win.cc
++++ b/chrome/browser/ui/views/frame/browser_caption_button_container_win.cc
+@@ -16,9 +16,11 @@
+ #include "chrome/browser/win/titlebar_config.h"
+ #include "ui/base/l10n/l10n_util.h"
+ #include "ui/base/metadata/metadata_impl_macros.h"
++#include "ui/compositor/layer.h"
+ #include "ui/strings/grit/ui_strings.h"
+ #include "ui/views/accessibility/view_accessibility.h"
+ #include "ui/views/layout/flex_layout.h"
++#include "ui/views/mouse_watcher_view_host.h"
+ #include "ui/views/view_class_properties.h"
+ 
+ namespace {
+@@ -27,10 +29,12 @@ std::unique_ptr<WindowsCaptionButton> CreateCaptionButton(
+     views::Button::PressedCallback callback,
+     BrowserFrameViewWin* frame_view,
+     ViewID button_type,
+-    int accessible_name_resource_id) {
++    int accessible_name_resource_id,
++    base::RepeatingClosure mouse_entered_callback) {
+   return std::make_unique<WindowsCaptionButton>(
+       std::move(callback), frame_view, button_type,
+-      l10n_util::GetStringUTF16(accessible_name_resource_id));
++      l10n_util::GetStringUTF16(accessible_name_resource_id),
++      std::move(mouse_entered_callback));
+ }
+ 
+ bool HitTestCaptionButton(WindowsCaptionButton* button,
+@@ -49,26 +53,38 @@ BrowserCaptionButtonContainer::BrowserCaptionButtonContainer(
+                               base::Unretained(frame_view_->browser_widget())),
+           frame_view_,
+           VIEW_ID_MINIMIZE_BUTTON,
+-          IDS_APP_ACCNAME_MINIMIZE))),
++          IDS_APP_ACCNAME_MINIMIZE,
++          base::BindRepeating(
++              &BrowserCaptionButtonContainer::OnCaptionButtonMouseEntered,
++              base::Unretained(this))))),
+       maximize_button_(AddChildView(CreateCaptionButton(
+           base::BindRepeating(&BrowserWidget::Maximize,
+                               base::Unretained(frame_view_->browser_widget())),
+           frame_view_,
+           VIEW_ID_MAXIMIZE_BUTTON,
+-          IDS_APP_ACCNAME_MAXIMIZE))),
++          IDS_APP_ACCNAME_MAXIMIZE,
++          base::BindRepeating(
++              &BrowserCaptionButtonContainer::OnCaptionButtonMouseEntered,
++              base::Unretained(this))))),
+       restore_button_(AddChildView(CreateCaptionButton(
+           base::BindRepeating(&BrowserWidget::Restore,
+                               base::Unretained(frame_view_->browser_widget())),
+           frame_view_,
+           VIEW_ID_RESTORE_BUTTON,
+-          IDS_APP_ACCNAME_RESTORE))),
++          IDS_APP_ACCNAME_RESTORE,
++          base::BindRepeating(
++              &BrowserCaptionButtonContainer::OnCaptionButtonMouseEntered,
++              base::Unretained(this))))),
+       close_button_(AddChildView(CreateCaptionButton(
+           base::BindRepeating(&BrowserWidget::CloseWithReason,
+                               base::Unretained(frame_view_->browser_widget()),
+                               views::Widget::ClosedReason::kCloseButtonClicked),
+           frame_view_,
+           VIEW_ID_CLOSE_BUTTON,
+-          IDS_APP_ACCNAME_CLOSE))) {
++          IDS_APP_ACCNAME_CLOSE,
++          base::BindRepeating(
++              &BrowserCaptionButtonContainer::OnCaptionButtonMouseEntered,
++              base::Unretained(this))))) {
+   // Layout is horizontal, with buttons placed at the trailing end of the view.
+   // This allows the container to expand to become a faux titlebar/drag handle.
+   auto* const layout = SetLayoutManager(std::make_unique<views::FlexLayout>());
+@@ -86,6 +102,12 @@ BrowserCaptionButtonContainer::BrowserCaptionButtonContainer(
+   if (frame_view_->GetBrowserView()->AppUsesWindowControlsOverlay()) {
+     UpdateButtonToolTipsForWindowControlsOverlay();
+   }
++
++  for (WindowsCaptionButton* button :
++       {minimize_button_, maximize_button_, restore_button_, close_button_}) {
++    button->SetPaintToLayer();
++    button->layer()->SetFillsBoundsOpaquely(false);
++  }
+ }
+ 
+ BrowserCaptionButtonContainer::~BrowserCaptionButtonContainer() = default;
+@@ -140,13 +162,15 @@ void BrowserCaptionButtonContainer::OnWindowControlsOverlayEnabledChanged() {
+     SetBackground(
+         views::CreateSolidBackground(frame_view_->GetTitlebarColor()));
+ 
+-    // BrowserView paints to a layer, so this view must do the same to ensure
+-    // that it paints on top of the BrowserView.
+-    SetPaintToLayer();
+   } else {
+     SetBackground(nullptr);
+-    DestroyLayer();
+   }
++  // Atlas places its navigation surface inside BrowserView. Keep the native
++  // caption controls on their own layer in both modes so their glyphs are not
++  // covered while their non-client hit targets remain active.
++  SetPaintToLayer();
++  layer()->SetFillsBoundsOpaquely(
++      frame_view_->GetBrowserView()->IsWindowControlsOverlayEnabled());
+   UpdateButtonToolTipsForWindowControlsOverlay();
+ }
+ 
+@@ -174,12 +198,16 @@ void BrowserCaptionButtonContainer::AddedToWidget() {
+ 
+   UpdateButtons();
+ 
++  // BrowserView paints the Atlas sidebar to a layer, so the native caption
++  // buttons must always paint above it. This also fixes the normal browser
++  // mode where the controls were clickable but visually absent.
++  SetPaintToLayer();
++  layer()->SetFillsBoundsOpaquely(
++      frame_view_->GetBrowserView()->IsWindowControlsOverlayEnabled());
++
+   if (frame_view_->GetBrowserView()->IsWindowControlsOverlayEnabled()) {
+     SetBackground(
+         views::CreateSolidBackground(frame_view_->GetTitlebarColor()));
+-    // BrowserView paints to a layer, so this must do the same to ensure that it
+-    // paints on top of the BrowserView.
+-    SetPaintToLayer();
+   }
+ }
+ 
+@@ -194,6 +222,40 @@ void BrowserCaptionButtonContainer::OnWidgetBoundsChanged(
+   UpdateButtons();
+ }
+ 
++void BrowserCaptionButtonContainer::MouseMovedOutOfHost() {
++  atlas_caption_buttons_revealed_ = false;
++  UpdateAtlasCaptionButtonOpacity();
++}
++
++void BrowserCaptionButtonContainer::OnCaptionButtonMouseEntered() {
++  if (!frame_view_->IsMaximized() ||
++      !frame_view_->GetBrowserView()->ShouldDrawVerticalTabStrip()) {
++    return;
++  }
++
++  atlas_caption_buttons_revealed_ = true;
++  UpdateAtlasCaptionButtonOpacity();
++
++  if (!mouse_watcher_) {
++    mouse_watcher_ = std::make_unique<views::MouseWatcher>(
++        std::make_unique<views::MouseWatcherViewHost>(this, gfx::Insets()),
++        this);
++  }
++  mouse_watcher_->Start(GetWidget()->GetNativeWindow());
++}
++
++void BrowserCaptionButtonContainer::UpdateAtlasCaptionButtonOpacity() {
++  const bool should_auto_hide =
++      frame_view_->IsMaximized() &&
++      frame_view_->GetBrowserView()->ShouldDrawVerticalTabStrip();
++  const float opacity =
++      !should_auto_hide || atlas_caption_buttons_revealed_ ? 1.0f : 0.0f;
++  for (WindowsCaptionButton* button :
++       {minimize_button_, maximize_button_, restore_button_, close_button_}) {
++    button->layer()->SetOpacity(opacity);
++  }
++}
++
+ void BrowserCaptionButtonContainer::UpdateButtons() {
+   minimize_button_->SetVisible(frame_view_->GetBrowserView()->CanMinimize());
+ 
+@@ -204,6 +266,16 @@ void BrowserCaptionButtonContainer::UpdateButtons() {
+ 
+   close_button_->SetVisible(true);
+ 
++  if (!is_maximized) {
++    atlas_caption_buttons_revealed_ = true;
++    if (mouse_watcher_) {
++      mouse_watcher_->Stop();
++    }
++  } else if (frame_view_->GetBrowserView()->ShouldDrawVerticalTabStrip()) {
++    atlas_caption_buttons_revealed_ = false;
++  }
++  UpdateAtlasCaptionButtonOpacity();
++
+   // In touch mode, windows cannot be taken out of fullscreen or tiled mode, so
+   // the maximize/restore button should be disabled, unless the window is not
+   // maximized. TODO(crbug.com/40849150): Also check if the window is tiled.
+diff --git a/chrome/browser/ui/views/frame/browser_caption_button_container_win.h b/chrome/browser/ui/views/frame/browser_caption_button_container_win.h
+index bda5b2b0ab02d..3e0374d80183a 100644
+--- a/chrome/browser/ui/views/frame/browser_caption_button_container_win.h
++++ b/chrome/browser/ui/views/frame/browser_caption_button_container_win.h
+@@ -10,6 +10,7 @@
+ #include "ui/base/metadata/metadata_header_macros.h"
+ #include "ui/base/pointer/touch_ui_controller.h"
+ #include "ui/views/controls/button/button.h"
++#include "ui/views/mouse_watcher.h"
+ #include "ui/views/view.h"
+ #include "ui/views/widget/widget.h"
+ #include "ui/views/widget/widget_observer.h"
+@@ -21,7 +22,8 @@ class WindowsCaptionButton;
+ // frame and browser window as needed. When extended horizontally, becomes a
+ // grab bar for moving the window.
+ class BrowserCaptionButtonContainer : public views::View,
+-                                      public views::WidgetObserver {
++                                      public views::WidgetObserver,
++                                      public views::MouseWatcherListener {
+   METADATA_HEADER(BrowserCaptionButtonContainer, views::View)
+ 
+  public:
+@@ -50,6 +52,9 @@ class BrowserCaptionButtonContainer : public views::View,
+   void OnWidgetBoundsChanged(views::Widget* widget,
+                              const gfx::Rect& new_bounds) override;
+ 
++  // views::MouseWatcherListener:
++  void MouseMovedOutOfHost() override;
++
+   void ResetWindowControls();
+ 
+   // Sets caption button visibility and enabled state based on window state.
+@@ -57,6 +62,9 @@ class BrowserCaptionButtonContainer : public views::View,
+   // time, and both are disabled in tablet UI mode.
+   void UpdateButtons();
+ 
++  void OnCaptionButtonMouseEntered();
++  void UpdateAtlasCaptionButtonOpacity();
++
+   // Sets caption button's accessible name as its tooltip when it's in a PWA
+   // with window-controls-overlay display override and resets it otherwise. In
+   // this mode, the web contents covers the frame view and so does it's legacy
+@@ -71,6 +79,8 @@ class BrowserCaptionButtonContainer : public views::View,
+ 
+   base::ScopedObservation<views::Widget, views::WidgetObserver>
+       widget_observation_{this};
++  std::unique_ptr<views::MouseWatcher> mouse_watcher_;
++  bool atlas_caption_buttons_revealed_ = false;
+ 
+   base::CallbackListSubscription subscription_ =
+       ui::TouchUiController::Get()->RegisterCallback(
+diff --git a/chrome/browser/ui/views/frame/browser_frame_view_win.cc b/chrome/browser/ui/views/frame/browser_frame_view_win.cc
+index 207ea26540d4d..cd652ce5fb0e4 100644
+--- a/chrome/browser/ui/views/frame/browser_frame_view_win.cc
++++ b/chrome/browser/ui/views/frame/browser_frame_view_win.cc
+@@ -738,9 +738,11 @@ void BrowserFrameViewWin::LayoutCaptionButtons() {
+       caption_button_container_->GetPreferredSize();
+ 
+   const int height =
+-      !GetBrowserView()->GetWebAppFrameToolbarPreferredSize().IsEmpty()
+-          ? (TitlebarHeight(false) - WindowTopY())
+-          : GetFrameHeight();
++      GetBrowserView()->ShouldDrawVerticalTabStrip()
++          ? preferred_size.height()
++          : (!GetBrowserView()->GetWebAppFrameToolbarPreferredSize().IsEmpty()
++                 ? (TitlebarHeight(false) - WindowTopY())
++                 : GetFrameHeight());
+ 
+   caption_button_container_->SetBounds(width() - preferred_size.width(),
+                                        WindowTopY(), preferred_size.width(),
+diff --git a/chrome/browser/ui/views/frame/browser_view.cc b/chrome/browser/ui/views/frame/browser_view.cc
+index a8dcb7c9851ee..0d597bebea236 100644
+--- a/chrome/browser/ui/views/frame/browser_view.cc
++++ b/chrome/browser/ui/views/frame/browser_view.cc
+@@ -974,6 +974,16 @@ BrowserView::BrowserView(BrowserWindowInterface* browser)
+             vertical_tab_strip_state_controller,
+             BrowserActions::From(browser_)->root_action_item(), this);
+ 
++    // Atlas treats navigation, the omnibox, and tabs as one native sidebar.
++    // Reparent the existing toolbar instead of drawing a separate horizontal
++    // top surface; this preserves command routing, focus, permissions, and
++    // omnibox behavior while giving the vertical region a single layout tree.
++    auto atlas_sidebar_toolbar = top_container_->RemoveChildViewT(toolbar_);
++    toolbar_ = vertical_tab_strip_container->AddChildViewAt(
++        std::move(atlas_sidebar_toolbar), 0);
++    toolbar_->SetAtlasSidebarToggleButton(
++        vertical_tab_strip_container->TakeAtlasSidebarToggleButton());
++
+     if (base::FeatureList::IsEnabled(features::kGlassFrame)) {
+       vertical_tab_strip_background_blur_backdrop_ = AddChildView(
+           std::make_unique<VerticalTabStripBackgroundBlurBackdrop>());
+diff --git a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
+index 0ad4b063558a0..f86b68519a684 100644
+--- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
++++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
+@@ -15,6 +15,7 @@
+ #include "base/metrics/user_metrics.h"
+ #include "base/metrics/user_metrics_action.h"
+ #include "base/time/time.h"
++#include "chrome/app/vector_icons/vector_icons.h"
+ #include "chrome/browser/ui/actions/chrome_action_id.h"
+ #include "chrome/browser/ui/animation/browser_animation_controller.h"
+ #include "chrome/browser/ui/animation/browser_animation_types.h"
+@@ -28,6 +29,7 @@
+ #include "chrome/browser/ui/tabs/features.h"
+ #include "chrome/browser/ui/tabs/hover_tab_selector.h"
+ #include "chrome/browser/ui/tabs/tab_group_model.h"
++#include "chrome/browser/ui/tabs/tab_strip_model.h"
+ #include "chrome/browser/ui/tabs/vertical_tab_strip_state.h"
+ #include "chrome/browser/ui/tabs/vertical_tab_strip_state_controller.h"
+ #include "chrome/browser/ui/ui_features.h"
+@@ -46,31 +48,38 @@
+ #include "chrome/browser/ui/views/tabs/common/tab_view.h"
+ #include "chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.h"
+ #include "chrome/browser/ui/views/tabs/shared/drop_arrow.h"
++#include "chrome/browser/ui/views/tabs/shared/tab_strip_flat_edge_button.h"
+ #include "chrome/browser/ui/views/tabs/vertical/top_container_button.h"
+ #include "chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_bottom_container.h"
+ #include "chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_focus_swipe_controller.h"
+ #include "chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container.h"
+ #include "chrome/browser/ui/web_applications/app_browser_controller.h"
+ #include "chrome/grit/generated_resources.h"
++#include "components/tab_groups/tab_group_visual_data.h"
+ #include "components/tabs/public/tab_group.h"
+ #include "components/tabs/public/tab_interface.h"
++#include "components/vector_icons/vector_icons.h"
+ #include "ui/base/dragdrop/os_exchange_data.h"
+ #include "ui/base/interaction/element_tracker.h"
+ #include "ui/base/l10n/l10n_util.h"
+ #include "ui/base/metadata/metadata_impl_macros.h"
++#include "ui/base/models/image_model.h"
+ #include "ui/compositor/layer.h"
++#include "ui/color/color_id.h"
+ #include "ui/display/screen.h"
+ #include "ui/events/event.h"
+ #include "ui/gfx/geometry/point.h"
+ #include "ui/views/background.h"
+ #include "ui/views/controls/button/label_button.h"
+ #include "ui/views/controls/focus_ring.h"
++#include "ui/views/controls/label.h"
+ #include "ui/views/controls/resize_area.h"
+ #include "ui/views/controls/separator.h"
+ #include "ui/views/focus/focus_manager.h"
+ #include "ui/views/interaction/element_tracker_views.h"
+ #include "ui/views/layout/flex_layout.h"
+ #include "ui/views/layout/flex_layout_types.h"
++#include "ui/views/layout/flex_layout_view.h"
+ #include "ui/views/layout/layout_types.h"
+ #include "ui/views/view.h"
+ #include "ui/views/view_class_properties.h"
+@@ -130,6 +139,9 @@ VerticalTabStripRegionView::VerticalTabStripRegionView(
+   top_button_container_ =
+       AddChildView(std::make_unique<VerticalTabStripTopContainer>(
+           state_controller_, root_action_item, browser_view->browser()));
++  // Overlay the collapse button on the Atlas navigation row instead of
++  // allocating a third header row between the omnibox and tabs.
++  top_button_container_->SetProperty(views::kViewIgnoredByLayoutKey, true);
+   top_button_container_->SetProperty(
+       views::kMarginsKey, gfx::Insets::VH(0, region_horizontal_padding));
+ 
+@@ -139,6 +151,69 @@ VerticalTabStripRegionView::VerticalTabStripRegionView(
+   top_button_separator_->SetProperty(
+       views::kMarginsKey, gfx::Insets::VH(0, region_horizontal_padding));
+ 
++  auto workspace_section = std::make_unique<views::FlexLayoutView>();
++  workspace_section->SetOrientation(views::LayoutOrientation::kVertical);
++  workspace_section->SetCrossAxisAlignment(views::LayoutAlignment::kStretch);
++  workspace_section->SetProperty(
++      views::kMarginsKey,
++      gfx::Insets::TLBR(6, region_horizontal_padding, 2,
++                        region_horizontal_padding));
++
++  auto workspace_caption = std::make_unique<views::Label>(u"Workspace");
++  workspace_caption->SetHorizontalAlignment(gfx::ALIGN_LEFT);
++  workspace_caption->SetEnabledColor(ui::kColorLabelForegroundSecondary);
++  workspace_section->AddChildView(std::move(workspace_caption));
++
++  auto workspace_button = std::make_unique<views::LabelButton>(
++      base::BindRepeating(&VerticalTabStripRegionView::RotateAtlasWorkspace,
++                          base::Unretained(this)),
++      u"Geral");
++  workspace_button->SetHorizontalAlignment(gfx::ALIGN_LEFT);
++  workspace_button->SetImageLabelSpacing(8);
++  workspace_button->SetImageModel(
++      views::Button::STATE_NORMAL,
++      ui::ImageModel::FromVectorIcon(vector_icons::kFolderFlippableIcon));
++  workspace_button->SetPreferredSize(gfx::Size(0, 32));
++  workspace_button->SetTooltipText(u"Alternar workspace");
++  atlas_workspace_button_ =
++      workspace_section->AddChildView(std::move(workspace_button));
++  atlas_workspace_section_ = AddChildView(std::move(workspace_section));
++
++  auto essentials_header = std::make_unique<views::FlexLayoutView>();
++  essentials_header->SetOrientation(views::LayoutOrientation::kHorizontal);
++  essentials_header->SetCrossAxisAlignment(views::LayoutAlignment::kCenter);
++  // Keep the section header in the document flow. A cross-axis-unbounded
++  // child previously allowed this row to absorb hundreds of vertical pixels.
++  essentials_header->SetPreferredSize(gfx::Size(0, 36));
++  essentials_header->SetProperty(
++      views::kMarginsKey,
++      gfx::Insets::TLBR(4, region_horizontal_padding, 0,
++                        region_horizontal_padding));
++
++  auto essentials_label = std::make_unique<views::Label>(u"Essenciais");
++  essentials_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
++  essentials_label->SetProperty(
++      views::kFlexBehaviorKey,
++      views::FlexSpecification(
++          views::LayoutOrientation::kHorizontal,
++          views::MinimumFlexSizeRule::kScaleToZero,
++          views::MaximumFlexSizeRule::kUnbounded));
++  atlas_essentials_label_ =
++      essentials_header->AddChildView(std::move(essentials_label));
++
++  auto add_essential_button = std::make_unique<TabStripFlatEdgeButton>();
++  add_essential_button->SetCallback(base::BindRepeating(
++      &VerticalTabStripRegionView::AddActiveTabToAtlasEssentials,
++      base::Unretained(this)));
++  add_essential_button->UpdateIcon(
++      ui::ImageModel::FromVectorIcon(kAddIcon));
++  add_essential_button->SetIconSize(16);
++  add_essential_button->SetCornerRadius(8.0f);
++  add_essential_button->SetTooltipText(u"Adicionar guia atual às essenciais");
++  atlas_add_essential_button_ =
++      essentials_header->AddChildView(std::move(add_essential_button));
++  atlas_essentials_header_ = AddChildView(std::move(essentials_header));
++
+   bottom_button_container_ =
+       AddChildView(std::make_unique<VerticalTabStripBottomContainer>(
+           state_controller_, root_action_item, browser_view->browser(),
+@@ -147,8 +222,11 @@ VerticalTabStripRegionView::VerticalTabStripRegionView(
+               base::Unretained(this))));
+   bottom_button_container_->SetProperty(
+       views::kFlexBehaviorKey,
+-      views::FlexSpecification(views::MinimumFlexSizeRule::kPreferred,
+-                               views::MaximumFlexSizeRule::kUnbounded));
++      views::FlexSpecification(
++          views::LayoutOrientation::kVertical,
++          views::MinimumFlexSizeRule::kPreferred,
++          views::MaximumFlexSizeRule::kUnbounded)
++          .WithWeight(1));
+   bottom_button_container_->SetProperty(
+       views::kMarginsKey,
+       gfx::Insets::TLBR(
+@@ -173,6 +251,7 @@ VerticalTabStripRegionView::VerticalTabStripRegionView(
+       state_controller_->RegisterOnCollapseChanged(base::BindRepeating(
+           &VerticalTabStripRegionView::OnCollapseStateChanged,
+           base::Unretained(this)));
++  UpdateAtlasWorkspaceState();
+ 
+   SetProperty(views::kElementIdentifierKey, kTabStripRegionElementId);
+ 
+@@ -206,6 +285,55 @@ VerticalTabStripRegionView::~VerticalTabStripRegionView() {
+   state_controller_->SetDelegate(nullptr);
+ }
+ 
++void VerticalTabStripRegionView::AddActiveTabToAtlasEssentials(
++    const ui::Event&) {
++  TabStripModel* const model = browser_view()->browser()->GetTabStripModel();
++  const int active_index = model->active_index();
++  if (active_index != TabStripModel::kNoTab &&
++      !model->IsTabPinned(active_index)) {
++    model->SetTabPinned(active_index, true);
++  }
++}
++
++void VerticalTabStripRegionView::RotateAtlasWorkspace(const ui::Event&) {
++  browser_view()->browser()->GetTabStripModel()->RotateFocusedGroup(true);
++}
++
++void VerticalTabStripRegionView::UpdateAtlasWorkspaceState() {
++  TabStripModel* const model =
++      browser_view()->browser()->GetTabStripModel();
++  const std::optional<tab_groups::TabGroupId> focused_group =
++      model->GetFocusedGroup();
++
++  atlas_workspace_visual_data_subscription_.reset();
++  std::u16string workspace_name = u"Geral";
++  if (focused_group.has_value()) {
++    TabGroup* const tab_group =
++        model->group_model()->GetTabGroup(*focused_group);
++    if (tab_group) {
++      workspace_name = tab_group->visual_data()->title();
++      if (workspace_name.empty()) {
++        workspace_name = u"Workspace";
++      }
++      atlas_workspace_visual_data_subscription_ =
++          tab_group->RegisterOnVisualDataChanged(base::BindRepeating(
++              &VerticalTabStripRegionView::UpdateAtlasWorkspaceState,
++              base::Unretained(this)));
++    }
++  }
++
++  atlas_workspace_button_->SetText(workspace_name);
++  atlas_workspace_button_->SetTooltipText(workspace_name +
++                                           u" — alternar workspace");
++}
++
++std::unique_ptr<views::LabelButton>
++VerticalTabStripRegionView::TakeAtlasSidebarToggleButton() {
++  auto button = top_button_container_->TakeCollapseButton();
++  top_button_container_->SetVisible(false);
++  return button;
++}
++
+ bool VerticalTabStripRegionView::IsAnimatingSize() const {
+   return BrowserAnimationController::From(browser_view()->browser())
+       ->IsAnimating(TabStripAnimations::kVerticalTabStrip);
+@@ -393,7 +521,7 @@ views::View* VerticalTabStripRegionView::GetDefaultFocusableChild() {
+     return GetTabAnchorView(active_tab->GetHandle());
+   }
+ 
+-  return top_button_container_;
++  return bottom_button_container_;
+ }
+ 
+ gfx::Size VerticalTabStripRegionView::GetMinimumSize() const {
+@@ -740,7 +868,9 @@ void VerticalTabStripRegionView::OnTabStripViewSet() {
+ 
+   std::optional<size_t> separator_index = GetIndexOf(top_button_separator_);
+   CHECK(separator_index.has_value());
+-  ReorderChildView(tab_strip_view(), separator_index.value() + 1);
++  ReorderChildView(atlas_workspace_section_, separator_index.value() + 1);
++  ReorderChildView(atlas_essentials_header_, separator_index.value() + 2);
++  ReorderChildView(tab_strip_view(), separator_index.value() + 3);
+ 
+   OnCollapseStateChanged(state_controller_->GetCollapseState());
+ }
+@@ -760,6 +890,9 @@ void VerticalTabStripRegionView::OnCollapseStateChanged(
+   // the collapsing state.
+   bool collapsed = state != tabs::VerticalTabStripCollapseState::kExpanded;
+ 
++  atlas_workspace_section_->SetVisible(!collapsed);
++  atlas_essentials_header_->SetVisible(!collapsed);
++
+   resize_area_->SetVisible(!collapsed ||
+                            !state_controller_->IsExpandOnHoverEnabled() ||
+                            resize_area_->is_resizing());
+@@ -1126,5 +1259,14 @@ void VerticalTabStripRegionView::OnActiveTabChanged(
+   }
+ }
+ 
++void VerticalTabStripRegionView::OnTabGroupFocusChanged(
++    std::optional<tab_groups::TabGroupId> new_focused_group_id,
++    std::optional<tab_groups::TabGroupId> old_focused_group_id) {
++  if (bottom_button_container_) {
++    bottom_button_container_->UpdateAtlasWorkspaceState();
++  }
++  UpdateAtlasWorkspaceState();
++}
++
+ BEGIN_METADATA(VerticalTabStripRegionView)
+ END_METADATA
+diff --git a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h
+index 76f8e997d61b2..91184587832d3 100644
+--- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h
++++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h
+@@ -32,6 +32,7 @@
+ #include "ui/views/focus/focus_manager.h"
+ 
+ class BrowserView;
++class TabStripFlatEdgeButton;
+ class VerticalTabStripTopContainer;
+ class VerticalTabStripBottomContainer;
+ class VerticalTabStripFocusSwipeController;
+@@ -42,6 +43,9 @@ class VerticalTabStripStateController;
+ }  // namespace tabs
+ 
+ namespace views {
++class FlexLayoutView;
++class Label;
++class LabelButton;
+ class ResizeArea;
+ class Separator;
+ class View;
+@@ -88,6 +92,8 @@ class VerticalTabStripRegionView final
+     return bottom_button_container_;
+   }
+ 
++  std::unique_ptr<views::LabelButton> TakeAtlasSidebarToggleButton();
++
+   bool IsPositionInWindowCaption(const gfx::Point& point) override;
+ 
+   // These methods provide the toolbar height and exclusion width, before the
+@@ -197,6 +203,10 @@ class VerticalTabStripRegionView final
+ 
+   void HandleMouseExited();
+ 
++  void AddActiveTabToAtlasEssentials(const ui::Event& event);
++  void RotateAtlasWorkspace(const ui::Event& event);
++  void UpdateAtlasWorkspaceState();
++
+   void OnTabStripViewSet() override;
+   void OnTabStripViewWillClear() override;
+ 
+@@ -237,9 +247,17 @@ class VerticalTabStripRegionView final
+   void OnOmniboxPopupVisibilityChanged(bool is_open) override;
+ 
+   void OnActiveTabChanged(const tabs::TabInterface* active_tab) override;
++  void OnTabGroupFocusChanged(
++      std::optional<tab_groups::TabGroupId> new_focused_group_id,
++      std::optional<tab_groups::TabGroupId> old_focused_group_id) override;
+ 
+   raw_ptr<VerticalTabStripTopContainer> top_button_container_ = nullptr;
+   raw_ptr<views::Separator> top_button_separator_ = nullptr;
++  raw_ptr<views::FlexLayoutView> atlas_workspace_section_ = nullptr;
++  raw_ptr<views::LabelButton> atlas_workspace_button_ = nullptr;
++  raw_ptr<views::FlexLayoutView> atlas_essentials_header_ = nullptr;
++  raw_ptr<views::Label> atlas_essentials_label_ = nullptr;
++  raw_ptr<TabStripFlatEdgeButton> atlas_add_essential_button_ = nullptr;
+   raw_ptr<VerticalTabStripBottomContainer> bottom_button_container_ = nullptr;
+   raw_ptr<views::View> gemini_button_ = nullptr;
+   raw_ptr<views::ResizeArea> resize_area_ = nullptr;
+@@ -252,6 +270,8 @@ class VerticalTabStripRegionView final
+       expand_on_hover_enabled_changed_subscription_;
+   std::optional<base::CallbackListSubscription>
+       on_animation_update_subscription_;
++  std::optional<base::CallbackListSubscription>
++      atlas_workspace_visual_data_subscription_;
+   base::ScopedObservation<OmniboxTabHelper, OmniboxTabHelper::Observer>
+       omnibox_tab_helper_observation_{this};
+ 
+diff --git a/chrome/browser/ui/views/frame/windows_caption_button.cc b/chrome/browser/ui/views/frame/windows_caption_button.cc
+index a24088e544656..761f517ad8147 100644
+--- a/chrome/browser/ui/views/frame/windows_caption_button.cc
++++ b/chrome/browser/ui/views/frame/windows_caption_button.cc
+@@ -30,11 +30,13 @@ WindowsCaptionButton::WindowsCaptionButton(
+     PressedCallback callback,
+     BrowserFrameViewWin* frame_view,
+     ViewID button_type,
+-    const std::u16string& accessible_name)
++    const std::u16string& accessible_name,
++    base::RepeatingClosure mouse_entered_callback)
+     : views::Button(std::move(callback)),
+       frame_view_(frame_view),
+       icon_painter_(CreateIconPainter()),
+-      button_type_(button_type) {
++      button_type_(button_type),
++      mouse_entered_callback_(std::move(mouse_entered_callback)) {
+   SetAnimateOnStateChange(true);
+   // Not focusable by default, only for accessibility.
+   SetFocusBehavior(FocusBehavior::ACCESSIBLE_ONLY);
+@@ -44,6 +46,13 @@ WindowsCaptionButton::WindowsCaptionButton(
+ 
+ WindowsCaptionButton::~WindowsCaptionButton() = default;
+ 
++void WindowsCaptionButton::OnMouseEntered(const ui::MouseEvent& event) {
++  views::Button::OnMouseEntered(event);
++  if (mouse_entered_callback_) {
++    mouse_entered_callback_.Run();
++  }
++}
++
+ std::unique_ptr<Windows10IconPainter>
+ WindowsCaptionButton::CreateIconPainter() {
+   if (base::win::GetVersion() >= base::win::Version::WIN11) {
+diff --git a/chrome/browser/ui/views/frame/windows_caption_button.h b/chrome/browser/ui/views/frame/windows_caption_button.h
+index 4f46f5cd83829..42dcd1a43341b 100644
+--- a/chrome/browser/ui/views/frame/windows_caption_button.h
++++ b/chrome/browser/ui/views/frame/windows_caption_button.h
+@@ -7,6 +7,7 @@
+ 
+ #include <memory>
+ 
++#include "base/functional/callback.h"
+ #include "base/memory/raw_ptr.h"
+ #include "chrome/browser/ui/view_ids.h"
+ #include "chrome/browser/ui/views/frame/windows_icon_painter.h"
+@@ -23,7 +24,8 @@ class WindowsCaptionButton : public views::Button {
+   WindowsCaptionButton(PressedCallback callback,
+                        BrowserFrameViewWin* frame_view,
+                        ViewID button_type,
+-                       const std::u16string& accessible_name);
++                       const std::u16string& accessible_name,
++                       base::RepeatingClosure mouse_entered_callback = {});
+   WindowsCaptionButton(const WindowsCaptionButton&) = delete;
+   WindowsCaptionButton& operator=(const WindowsCaptionButton&) = delete;
+   ~WindowsCaptionButton() override;
+@@ -33,6 +35,7 @@ class WindowsCaptionButton : public views::Button {
+       const views::SizeBounds& available_size) const override;
+   void OnPaintBackground(gfx::Canvas* canvas) override;
+   void PaintButtonContents(gfx::Canvas* canvas) override;
++  void OnMouseEntered(const ui::MouseEvent& event) override;
+ 
+  private:
+   std::unique_ptr<Windows10IconPainter> CreateIconPainter();
+@@ -57,6 +60,7 @@ class WindowsCaptionButton : public views::Button {
+   raw_ptr<BrowserFrameViewWin> frame_view_;
+   std::unique_ptr<Windows10IconPainter> icon_painter_;
+   ViewID button_type_;
++  base::RepeatingClosure mouse_entered_callback_;
+ };
+ 
+ #endif  // CHROME_BROWSER_UI_VIEWS_FRAME_WINDOWS_CAPTION_BUTTON_H_
+diff --git a/chrome/browser/ui/views/tabs/common/tab_strip_view_layout.cc b/chrome/browser/ui/views/tabs/common/tab_strip_view_layout.cc
+index 6139b935a5ce6..6d1f9a92b4afa 100644
+--- a/chrome/browser/ui/views/tabs/common/tab_strip_view_layout.cc
++++ b/chrome/browser/ui/views/tabs/common/tab_strip_view_layout.cc
+@@ -208,9 +208,13 @@ views::ProposedLayout TabStripViewLayout::CalculateVerticalLayout(
+   const int unpinned_preferred_height =
+       unpinned_tabs_scroll_view->GetPreferredSize(size_bounds).height();
+ 
+-  const bool should_show_separator = pinned_preferred_height != 0 &&
+-                                     unpinned_preferred_height != 0 &&
+-                                     is_collapsed;
++  // In Atlas' expanded sidebar the separator also marks the boundary between
++  // the Essentials area and regular tabs. Keep that boundary visible even
++  // when Essentials is empty, otherwise the first regular tab appears to be
++  // part of the section above it.
++  const bool should_show_separator =
++      unpinned_preferred_height != 0 &&
++      (!is_collapsed || pinned_preferred_height != 0);
+ 
+   // If the height is bounded, calculate the available space for laying out the
+   // pinned and unpinned containers.
+diff --git a/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_bottom_container.cc b/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_bottom_container.cc
+index bc3b0459edfcc..01f08cbfc662a 100644
+--- a/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_bottom_container.cc
++++ b/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_bottom_container.cc
+@@ -5,15 +5,32 @@
+ #include "chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_bottom_container.h"
+ 
+ #include "base/functional/bind.h"
++#include "base/strings/string_number_conversions.h"
++#include "chrome/app/vector_icons/vector_icons.h"
++#include "chrome/browser/ui/browser_commands.h"
+ #include "chrome/browser/ui/browser_element_identifiers.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/chrome_pages.h"
+ #include "chrome/browser/ui/layout_constants.h"
++#include "chrome/browser/ui/tabs/tab_enums.h"
++#include "chrome/browser/ui/tabs/tab_group_model.h"
++#include "chrome/browser/ui/tabs/tab_strip_model.h"
+ #include "chrome/browser/ui/tabs/vertical_tab_strip_state_controller.h"
+ #include "chrome/browser/ui/views/frame/browser_view.h"
+ #include "chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h"
+ #include "chrome/browser/ui/views/tabs/shared/new_tab_button.h"
+ #include "chrome/browser/ui/views/tabs/shared/tab_strip_flat_edge_button.h"
++#include "chrome/browser/ui/views/tabs/vertical/top_container_button.h"
++#include "chrome/grit/generated_resources.h"
++#include "components/tab_groups/tab_group_visual_data.h"
++#include "components/tabs/public/tab_group.h"
++#include "components/vector_icons/vector_icons.h"
+ #include "ui/actions/actions.h"
++#include "ui/base/l10n/l10n_util.h"
+ #include "ui/base/metadata/metadata_impl_macros.h"
++#include "ui/base/models/image_model.h"
++#include "ui/events/event.h"
++#include "ui/views/controls/separator.h"
+ #include "ui/views/view_class_properties.h"
+ 
+ VerticalTabStripBottomContainer::VerticalTabStripBottomContainer(
+@@ -41,7 +58,73 @@ VerticalTabStripBottomContainer::VerticalTabStripBottomContainer(
+           record_new_tab_button_pressed);
+ 
+   new_tab_button_ = AddChildView(std::move(new_tab_button));
++  new_tab_button_->SetLabelText(l10n_util::GetStringUTF16(IDS_NEW_TAB));
++  new_tab_button_->SetCornerRadius(10.0f);
++
++  // Keep the Atlas utility actions pinned to the bottom of the sidebar. The
++  // spacer absorbs all unused height, so the footer does not move as tabs are
++  // opened or closed.
++  atlas_footer_spacer_ = AddChildView(std::make_unique<views::View>());
++  atlas_footer_spacer_->SetProperty(
++      views::kFlexBehaviorKey,
++      views::FlexSpecification(
++          views::LayoutOrientation::kVertical,
++          views::MinimumFlexSizeRule::kScaleToZero,
++          views::MaximumFlexSizeRule::kUnbounded)
++          .WithWeight(1));
++
++  // Zen-style utility footer: quiet icon-only actions anchored to the two
++  // ends of a single row instead of full-width stacked buttons.
++  auto utility_row = std::make_unique<views::FlexLayoutView>();
++  utility_row->SetOrientation(views::LayoutOrientation::kHorizontal);
++  utility_row->SetCrossAxisAlignment(views::LayoutAlignment::kCenter);
++  utility_row->SetProperty(views::kMarginsKey, gfx::Insets::TLBR(6, 0, 0, 0));
++
++  auto downloads_button = std::make_unique<TopContainerButton>();
++  downloads_button->SetCallback(base::BindRepeating(
++      [](BrowserWindowInterface* browser, const ui::Event&) {
++        chrome::ShowDownloads(browser);
++      },
++      browser_));
++  downloads_button->UpdateIcon(
++      ui::ImageModel::FromVectorIcon(kDownloadIcon));
++  downloads_button->SetTooltipText(
++      l10n_util::GetStringUTF16(IDS_SHOW_DOWNLOADS));
++  atlas_downloads_button_ =
++      utility_row->AddChildView(std::move(downloads_button));
++
++  atlas_utility_spacer_ = utility_row->AddChildView(
++      std::make_unique<views::View>());
++  atlas_utility_spacer_->SetProperty(
++      views::kFlexBehaviorKey,
++      views::FlexSpecification(
++          views::LayoutOrientation::kHorizontal,
++          views::MinimumFlexSizeRule::kScaleToZero,
++          views::MaximumFlexSizeRule::kUnbounded));
++
++  // The active workspace is represented by one small dot only when at least
++  // one workspace exists. Clicking it cycles through workspaces and Geral.
++  auto current_workspace_button = std::make_unique<TopContainerButton>();
++  current_workspace_button->SetCallback(base::BindRepeating(
++      &VerticalTabStripBottomContainer::RotateAtlasWorkspace,
++      base::Unretained(this)));
++  current_workspace_button->UpdateIcon(
++      ui::ImageModel::FromVectorIcon(kCircleFilledIcon));
++  atlas_current_workspace_button_ = utility_row->AddChildView(
++      std::move(current_workspace_button));
++
++  auto add_workspace_button = std::make_unique<TopContainerButton>();
++  add_workspace_button->SetCallback(base::BindRepeating(
++      &VerticalTabStripBottomContainer::CreateAtlasWorkspace,
++      base::Unretained(this)));
++  add_workspace_button->UpdateIcon(ui::ImageModel::FromVectorIcon(kAddIcon));
++  add_workspace_button->SetTooltipText(u"Criar workspace");
++  atlas_add_workspace_button_ =
++      utility_row->AddChildView(std::move(add_workspace_button));
+ 
++  atlas_utility_row_ = AddChildView(std::move(utility_row));
++
++  UpdateAtlasWorkspaceState();
+   OnCollapseStateChanged(state_controller->GetCollapseState());
+   collapsed_state_change_subscription_ =
+       state_controller->RegisterOnCollapseChanged(base::BindRepeating(
+@@ -51,6 +134,63 @@ VerticalTabStripBottomContainer::VerticalTabStripBottomContainer(
+ 
+ VerticalTabStripBottomContainer::~VerticalTabStripBottomContainer() = default;
+ 
++void VerticalTabStripBottomContainer::CreateAtlasWorkspace(const ui::Event&) {
++  TabStripModel* const model = browser_->GetTabStripModel();
++  chrome::NewTab(browser_, NewTabTypes::kNewTabCommand);
++
++  const int active_index = model->active_index();
++  if (active_index == TabStripModel::kNoTab) {
++    return;
++  }
++
++  const tab_groups::TabGroupId group = model->AddToNewGroup({active_index});
++  TabGroup* const tab_group = model->group_model()->GetTabGroup(group);
++  const int workspace_number =
++      static_cast<int>(model->group_model()->ListTabGroups().size());
++  const tab_groups::TabGroupVisualData* const visual_data =
++      tab_group->visual_data();
++  tab_group->SetVisualData(
++      tab_groups::TabGroupVisualData(
++          u"Workspace " + base::NumberToString16(workspace_number),
++          visual_data->color(), visual_data->is_collapsed()),
++      true);
++  model->SetFocusedGroup(group);
++  UpdateAtlasWorkspaceState();
++  model->OpenTabGroupEditor(group);
++}
++
++void VerticalTabStripBottomContainer::RotateAtlasWorkspace(const ui::Event&) {
++  browser_->GetTabStripModel()->RotateFocusedGroup(true);
++}
++
++void VerticalTabStripBottomContainer::UpdateAtlasWorkspaceState() {
++  TabStripModel* const model = browser_->GetTabStripModel();
++  const std::optional<tab_groups::TabGroupId> focused_group =
++      model->GetFocusedGroup();
++
++  workspace_visual_data_subscription_.reset();
++  std::u16string workspace_name = u"Geral";
++  if (focused_group.has_value()) {
++    TabGroup* const tab_group =
++        model->group_model()->GetTabGroup(*focused_group);
++    workspace_name = tab_group->visual_data()->title();
++    if (workspace_name.empty()) {
++      workspace_name = u"Workspace";
++    }
++    workspace_visual_data_subscription_ =
++        tab_group->RegisterOnVisualDataChanged(base::BindRepeating(
++            &VerticalTabStripBottomContainer::UpdateAtlasWorkspaceState,
++            base::Unretained(this)));
++  }
++
++  atlas_current_workspace_button_->SetVisible(
++      !model->group_model()->ListTabGroups().empty());
++  atlas_current_workspace_button_->SetTooltipText(
++      focused_group.has_value()
++          ? workspace_name + u" — alternar workspace"
++          : u"Geral — alternar workspace");
++}
++
+ 
+ bool VerticalTabStripBottomContainer::IsPositionInWindowCaption(
+     const gfx::Point& point) {
+@@ -87,25 +227,19 @@ void VerticalTabStripBottomContainer::OnNewTabButtonContextMenuClosed() {
+ }
+ 
+ void VerticalTabStripBottomContainer::UpdateButtonStyles(bool collapsed) {
+-  auto orientation = collapsed ? views::LayoutOrientation::kVertical
+-                               : views::LayoutOrientation::kHorizontal;
+-
+-  // Setting button's layout based on collapsed state
+-  SetOrientation(orientation);
+-  SetCrossAxisAlignment(collapsed ? views::LayoutAlignment::kStretch
+-                                  : views::LayoutAlignment::kStart);
++  SetOrientation(views::LayoutOrientation::kVertical);
++  SetCrossAxisAlignment(views::LayoutAlignment::kStretch);
+ 
+-  new_tab_button_->SetProperty(
+-      views::kFlexBehaviorKey,
+-      views::FlexSpecification(
+-          orientation, views::MinimumFlexSizeRule::kScaleToMinimum,
+-          collapsed ? views::MaximumFlexSizeRule::kPreferred
+-                    : views::MaximumFlexSizeRule::kUnbounded,
+-          false, views::MinimumFlexSizeRule::kPreferred));
++  // The footer always remains a fixed-height horizontal row. It must never
++  // participate in the vertical flex that fills the tab area.
++  atlas_utility_row_->SetOrientation(views::LayoutOrientation::kHorizontal);
++  atlas_utility_spacer_->SetVisible(true);
+ 
+-  new_tab_button_->SetInsets(GetLayoutInsets(
++  const gfx::Insets button_insets = GetLayoutInsets(
+       collapsed ? LayoutInset::VERTICAL_TAB_STRIP_BOTTOM_BUTTON_COLLAPSED
+-                : LayoutInset::VERTICAL_TAB_STRIP_BOTTOM_BUTTON_UNCOLLAPSED));
++                : LayoutInset::VERTICAL_TAB_STRIP_BOTTOM_BUTTON_UNCOLLAPSED);
++  new_tab_button_->SetInsets(button_insets);
++  new_tab_button_->SetShouldShowLabel(!collapsed);
+ }
+ 
+ BEGIN_METADATA(VerticalTabStripBottomContainer)
+diff --git a/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_bottom_container.h b/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_bottom_container.h
+index b3583ec76aa55..5ab6af0df3cbc 100644
+--- a/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_bottom_container.h
++++ b/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_bottom_container.h
+@@ -5,6 +5,8 @@
+ #ifndef CHROME_BROWSER_UI_VIEWS_TABS_VERTICAL_VERTICAL_TAB_STRIP_BOTTOM_CONTAINER_H_
+ #define CHROME_BROWSER_UI_VIEWS_TABS_VERTICAL_VERTICAL_TAB_STRIP_BOTTOM_CONTAINER_H_
+ 
++#include <optional>
++
+ #include "base/callback_list.h"
+ #include "base/memory/raw_ptr.h"
+ #include "ui/base/metadata/metadata_header_macros.h"
+@@ -13,11 +15,17 @@
+ class BrowserWindowInterface;
+ class ExpandOnHoverLock;
+ class TabStripFlatEdgeButton;
++class TopContainerButton;
+ 
+ namespace actions {
+ class ActionItem;
+ }  // namespace actions
+ 
++namespace views {
++class Separator;
++class View;
++}  // namespace views
++
+ namespace tabs {
+ class VerticalTabStripStateController;
+ enum class VerticalTabStripCollapseState;
+@@ -38,17 +46,31 @@ class VerticalTabStripBottomContainer : public views::FlexLayoutView {
+ 
+   void OnCollapseStateChanged(tabs::VerticalTabStripCollapseState state);
+ 
++  // Refreshes the Atlas workspace selector after focus or visual data changes.
++  void UpdateAtlasWorkspaceState();
++
+  private:
+   void OnNewTabButtonContextMenuWillShow();
+   void OnNewTabButtonContextMenuClosed();
+ 
++  void CreateAtlasWorkspace(const ui::Event& event);
++  void RotateAtlasWorkspace(const ui::Event& event);
++
+   void UpdateButtonStyles(bool collapsed);
+ 
+   raw_ptr<BrowserWindowInterface> browser_ = nullptr;
+   raw_ptr<actions::ActionItem> root_action_item_ = nullptr;
+   raw_ptr<TabStripFlatEdgeButton> new_tab_button_ = nullptr;
++  raw_ptr<views::View> atlas_footer_spacer_ = nullptr;
++  raw_ptr<TopContainerButton> atlas_current_workspace_button_ = nullptr;
++  raw_ptr<TopContainerButton> atlas_add_workspace_button_ = nullptr;
++  raw_ptr<views::FlexLayoutView> atlas_utility_row_ = nullptr;
++  raw_ptr<views::View> atlas_utility_spacer_ = nullptr;
++  raw_ptr<TopContainerButton> atlas_downloads_button_ = nullptr;
+   base::CallbackListSubscription collapsed_state_change_subscription_;
+   base::CallbackListSubscription new_tab_button_pressed_subscription_;
++  std::optional<base::CallbackListSubscription>
++      workspace_visual_data_subscription_;
+ 
+   std::unique_ptr<ExpandOnHoverLock> expand_on_hover_lock_;
+ };
+diff --git a/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container.cc b/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container.cc
+index d69e4dd30f732..c71051ccf10ce 100644
+--- a/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container.cc
++++ b/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container.cc
+@@ -55,10 +55,15 @@ VerticalTabStripTopContainer::VerticalTabStripTopContainer(
+     unfocus_button_ = AddChildButtonFor(kActionUnfocusTabGroup);
+     unfocus_button_->SetProperty(views::kElementIdentifierKey,
+                                  kUnfocusTabGroupButtonElementId);
++    unfocus_button_->SetVisible(false);
+   }
+ 
+   combo_button_ = AddChildView(std::make_unique<TabStripComboButton>(
+       browser_, TabStripComboButton::Context::kVerticalTabStrip));
++  // Atlas keeps the sidebar header intentionally compact. Tab search and tab
++  // group actions remain available from keyboard shortcuts and the app menu;
++  // the header itself only owns the expand/collapse control.
++  combo_button_->SetVisible(false);
+   combo_button_->SetOrientation(
+       combo_button_orientation_ = state_controller->IsCollapsed()
+                                       ? views::LayoutOrientation::kVertical
+@@ -67,6 +72,14 @@ VerticalTabStripTopContainer::VerticalTabStripTopContainer(
+ 
+ VerticalTabStripTopContainer::~VerticalTabStripTopContainer() = default;
+ 
++std::unique_ptr<views::LabelButton>
++VerticalTabStripTopContainer::TakeCollapseButton() {
++  CHECK(collapse_button_);
++  auto button = RemoveChildViewT(collapse_button_.get());
++  collapse_button_ = nullptr;
++  return button;
++}
++
+ void VerticalTabStripTopContainer::Layout(PassKey) {
+   LayoutSuperclass<views::View>(this);
+   combo_button_->SetOrientation(combo_button_orientation_);
+diff --git a/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container.h b/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container.h
+index 27763751c72b7..4e40acea78951 100644
+--- a/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container.h
++++ b/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container.h
+@@ -61,6 +61,7 @@ class VerticalTabStripTopContainer : public views::View,
+   TabStripFlatEdgeButton* GetTabSearchButton();
+   views::LabelButton* GetCollapseButton() { return collapse_button_; }
+   views::LabelButton* GetUnfocusButton() { return unfocus_button_; }
++  std::unique_ptr<views::LabelButton> TakeCollapseButton();
+ 
+   bool IsPositionInWindowCaption(const gfx::Point& point);
+ 
+diff --git a/chrome/browser/ui/views/toolbar/toolbar_view.cc b/chrome/browser/ui/views/toolbar/toolbar_view.cc
+index 77496d59599ee..857ffdd60f83b 100644
+--- a/chrome/browser/ui/views/toolbar/toolbar_view.cc
++++ b/chrome/browser/ui/views/toolbar/toolbar_view.cc
+@@ -77,6 +77,7 @@
+ #include "chrome/browser/ui/views/frame/browser_view.h"
+ #include "chrome/browser/ui/views/frame/custom_corners_background.h"
+ #include "chrome/browser/ui/views/frame/top_container_view.h"
++#include "chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h"
+ #include "chrome/browser/ui/views/glic/glic_button_interface.h"
+ #include "chrome/browser/ui/views/global_media_controls/media_toolbar_button.h"
+ #include "chrome/browser/ui/views/global_media_controls/media_toolbar_button_contextual_menu.h"
+@@ -181,6 +182,10 @@ DEFINE_UI_CLASS_PROPERTY_KEY(bool, kActionItemUnderlineIndicatorKey, false)
+ 
+ namespace {
+ 
++constexpr int kAtlasSidebarCollapsedHeaderHeight = 52;
++constexpr int kAtlasSidebarExpandedHeaderHeight = 96;
++constexpr int kAtlasSidebarExpandedMinimumWidth = 224;
++
+ // Gets the display mode for a given browser.
+ ToolbarView::DisplayMode GetDisplayMode(BrowserWindowInterface* browser) {
+   // Checked in this order because even tabbed PWAs use the CUSTOM_TAB
+@@ -308,6 +313,12 @@ ToolbarView::~ToolbarView() {
+   }
+ }
+ 
++void ToolbarView::SetAtlasSidebarToggleButton(
++    std::unique_ptr<views::LabelButton> toggle_button) {
++  CHECK(toggle_button);
++  atlas_sidebar_toggle_button_ = AddChildView(std::move(toggle_button));
++}
++
+ void ToolbarView::Init() {
+ #if defined(USE_AURA)
+   // Avoid generating too many occlusion tracking calculation events before this
+@@ -1363,6 +1374,18 @@ bool ToolbarView::GetAcceleratorForCommandId(
+ 
+ gfx::Size ToolbarView::CalculatePreferredSize(
+     const views::SizeBounds& available_size) const {
++  if (IsAtlasSidebarToolbar()) {
++    const auto* controller =
++        tabs::VerticalTabStripStateController::From(browser_);
++    return gfx::Size(
++        controller && controller->IsCollapsed()
++            ? VerticalTabStripRegionView::kCollapsedWidth
++            : tabs::kVerticalTabStripDefaultUncollapsedWidth,
++        controller && controller->IsCollapsed()
++            ? kAtlasSidebarCollapsedHeaderHeight
++            : kAtlasSidebarExpandedHeaderHeight);
++  }
++
+   gfx::Size size;
+   switch (display_mode_) {
+     case DisplayMode::kCustomTab:
+@@ -1391,6 +1414,16 @@ gfx::Size ToolbarView::CalculatePreferredSize(
+ }
+ 
+ gfx::Size ToolbarView::GetMinimumSize() const {
++  if (IsAtlasSidebarToolbar()) {
++    const auto* controller =
++        tabs::VerticalTabStripStateController::From(browser_);
++    const bool collapsed = controller && controller->IsCollapsed();
++    return gfx::Size(collapsed ? VerticalTabStripRegionView::kCollapsedWidth
++                               : kAtlasSidebarExpandedMinimumWidth,
++                     collapsed ? kAtlasSidebarCollapsedHeaderHeight
++                               : kAtlasSidebarExpandedHeaderHeight);
++  }
++
+   gfx::Size size;
+   switch (display_mode_) {
+     case DisplayMode::kCustomTab:
+@@ -1447,6 +1480,11 @@ void ToolbarView::Layout(PassKey) {
+     LayoutCommon();
+   }
+ 
++  if (IsAtlasSidebarToolbar()) {
++    LayoutAtlasSidebarToolbar();
++    return;
++  }
++
+   if (toolbar_controller_) {
+     // Need to determine whether the overflow button should be visible, and only
+     // update it if the visibility changes.
+@@ -1738,6 +1776,92 @@ void ToolbarView::LayoutCommon() {
+   // Cast button visibility is controlled externally.
+ }
+ 
++bool ToolbarView::IsAtlasSidebarToolbar() const {
++  const auto* controller =
++      tabs::VerticalTabStripStateController::From(browser_);
++  return display_mode_ == DisplayMode::kNormal && location_bar_view_ &&
++         controller && controller->ShouldDisplayVerticalTabs();
++}
++
++void ToolbarView::LayoutAtlasSidebarToolbar() {
++  constexpr int kOuterInset = 8;
++  constexpr int kControlGap = 4;
++  constexpr int kNavigationRowHeight = 44;
++  constexpr int kControlSize = 36;
++  constexpr int kOmniboxTop = 48;
++  constexpr int kOmniboxHeight = 40;
++  constexpr int kExpandedControlsMinimumWidth = 208;
++
++  // FlexLayout is intentionally bypassed in this mode. Clear the bounds of
++  // toolbar-only actions so they cannot overlap the page when the sidebar is
++  // narrow; they remain available from the Atlas menu and are restored by the
++  // regular layout if horizontal tabs are selected.
++  for (views::View* child : children()) {
++    child->SetBoundsRect(gfx::Rect());
++  }
++  // These controls use their own layers and can retain pixels after receiving
++  // empty bounds. Keep the Atlas header deterministic: profile/extensions live
++  // in the app menu, while the menu button itself is always the leading icon.
++  if (avatar_) {
++    avatar_->SetVisible(false);
++  }
++  if (overflow_button_) {
++    overflow_button_->SetVisible(false);
++  }
++
++  const auto* controller =
++      tabs::VerticalTabStripStateController::From(browser_);
++  const bool is_collapsed =
++      (controller && controller->IsCollapsed()) ||
++      width() < kExpandedControlsMinimumWidth;
++  if (app_menu_button_) {
++    app_menu_button_->SetVisible(!is_collapsed);
++  }
++  if (atlas_sidebar_toggle_button_) {
++    atlas_sidebar_toggle_button_->SetVisible(true);
++  }
++  if (back_) {
++    back_->SetVisible(!is_collapsed);
++  }
++  if (forward_) {
++    forward_->SetVisible(!is_collapsed && show_forward_button_.GetValue());
++  }
++  if (reload_) {
++    reload_->SetVisible(!is_collapsed);
++  }
++  location_bar_view_->SetVisible(!is_collapsed);
++
++  if (is_collapsed) {
++    if (atlas_sidebar_toggle_button_) {
++      atlas_sidebar_toggle_button_->SetBounds(
++          std::max(0, (width() - kControlSize) / 2),
++          (kAtlasSidebarCollapsedHeaderHeight - kControlSize) / 2,
++          kControlSize, kControlSize);
++    }
++    return;
++  }
++
++  const int button_y = (kNavigationRowHeight - kControlSize) / 2;
++  int leading = kOuterInset;
++  auto place_button = [&](views::View* button) {
++    if (!button || !button->GetVisible()) {
++      return;
++    }
++    button->SetBounds(leading, button_y, kControlSize, kControlSize);
++    leading += kControlSize + kControlGap;
++  };
++
++  place_button(app_menu_button_);
++  place_button(atlas_sidebar_toggle_button_);
++  place_button(back_);
++  place_button(forward_);
++  place_button(reload_);
++
++  const int omnibox_width = width() - 2 * kOuterInset;
++  location_bar_view_->SetBounds(kOuterInset, kOmniboxTop, omnibox_width,
++                                kOmniboxHeight);
++}
++
+ // AppMenuIconController::Delegate:
+ void ToolbarView::UpdateTypeAndSeverity(
+     AppMenuIconController::TypeAndSeverity type_and_severity) {
+diff --git a/chrome/browser/ui/views/toolbar/toolbar_view.h b/chrome/browser/ui/views/toolbar/toolbar_view.h
+index daed2c76ac524..6c1f94c761707 100644
+--- a/chrome/browser/ui/views/toolbar/toolbar_view.h
++++ b/chrome/browser/ui/views/toolbar/toolbar_view.h
+@@ -119,6 +119,10 @@ class ToolbarView : public views::AccessiblePaneView,
+   // Create the contents of the Browser Toolbar.
+   void Init();
+ 
++  // Gives Atlas a single owner for every control in its sidebar header.
++  void SetAtlasSidebarToggleButton(
++      std::unique_ptr<views::LabelButton> toggle_button);
++
+   // Forces the toolbar (and transitively the location bar) to update its
+   // current state.  If |tab| is non-NULL, we're switching (back?) to this tab
+   // and should restore any previous location bar state (such as user editing)
+@@ -288,6 +292,12 @@ class ToolbarView : public views::AccessiblePaneView,
+   // Logic that must be done on initialization and then on layout.
+   void LayoutCommon();
+ 
++  // Atlas keeps the navigation controls and omnibox inside the vertical
++  // sidebar. This is deliberately implemented by laying out the real toolbar
++  // controls instead of creating a second, reduced-function address bar.
++  bool IsAtlasSidebarToolbar() const;
++  void LayoutAtlasSidebarToolbar();
++
+   // AppMenuIconController::Delegate:
+   void UpdateTypeAndSeverity(
+       AppMenuIconController::TypeAndSeverity type_and_severity) override;
+@@ -401,6 +411,7 @@ class ToolbarView : public views::AccessiblePaneView,
+   raw_ptr<AvatarToolbarButton> avatar_ = nullptr;
+   raw_ptr<MediaToolbarButton> media_button_ = nullptr;
+   raw_ptr<BrowserAppMenuButton> app_menu_button_ = nullptr;
++  raw_ptr<views::LabelButton> atlas_sidebar_toggle_button_ = nullptr;
+ 
+   // The button currently holding the lock to be shown/hidden.
+   raw_ptr<glic::GlicButtonInterface> locked_expansion_button_ = nullptr;
+diff --git a/ui/webui/resources/cr_components/most_visited/most_visited.ts b/ui/webui/resources/cr_components/most_visited/most_visited.ts
+index 3331272488bd7..7c425610a9ce0 100644
+--- a/ui/webui/resources/cr_components/most_visited/most_visited.ts
++++ b/ui/webui/resources/cr_components/most_visited/most_visited.ts
+@@ -121,6 +121,8 @@ export class MostVisitedElement extends MostVisitedElementBase {
+       singleRow: {type: Boolean},
+       /** If true, reflows tiles that are overflowing. */
+       reflowOnOverflow: {type: Boolean},
++      /** If true, only explicitly user-created and managed shortcuts render. */
++      customLinksOnly: {type: Boolean, reflect: true},
+ 
+       /**
+        * When the tile icon background is dark, the icon color is white for
+@@ -204,6 +206,7 @@ export class MostVisitedElement extends MostVisitedElementBase {
+   accessor nonEditable: boolean = false;
+   accessor hideTitle: boolean = false;
+   accessor reflowOnOverflow: boolean = false;
++  accessor customLinksOnly: boolean = false;
+   accessor singleRow: boolean = false;
+   accessor expandableTilesEnabled: boolean = false;
+   accessor maxTilesInCollapsedState: number = 6;
+@@ -348,7 +351,12 @@ export class MostVisitedElement extends MostVisitedElementBase {
+           (this.enterpriseShortcutsEnabled_ ? this.maxEnterpriseShortcuts : 0);
+       this.maxTiles_ =
+           this.maxTiles > 0 ? Math.min(this.maxTiles, totalMax) : totalMax;
+-      this.tiles_ = this.info_.tiles.slice(0, this.maxTiles_);
++      const tiles = this.customLinksOnly ?
++          this.info_.tiles.filter(
++              tile => tile.source === TileSource.CUSTOM_LINKS ||
++                  tile.source === TileSource.ENTERPRISE_SHORTCUTS) :
++          this.info_.tiles;
++      this.tiles_ = tiles.slice(0, this.maxTiles_);
+     }
+ 
+     this.showShowMore_ = this.computeShowShowMore_();
+diff --git a/chrome/browser/resources/new_tab_page/icons/atlas_logo.svg b/chrome/browser/resources/new_tab_page/icons/atlas_logo.svg
+new file mode 100644
+index 0000000000000..3069dd4e97003
+--- /dev/null
++++ b/chrome/browser/resources/new_tab_page/icons/atlas_logo.svg
+@@ -0,0 +1,13 @@
++<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-label="Atlas">
++<defs>
++<linearGradient id="atlasMark" x1="0" y1="0" x2="0" y2="1">
++  <stop offset="0%" stop-color="#00CBFD"/>
++  <stop offset="24%" stop-color="#0095FD"/>
++  <stop offset="54%" stop-color="#0F5BFC"/>
++  <stop offset="80%" stop-color="#5729FC"/>
++  <stop offset="100%" stop-color="#8E25FC"/>
++</linearGradient>
++</defs>
++<path d="M 160.87 560.18 L 161.68 561.81 L 161.68 565.89 L 162.50 568.34 L 164.13 569.98 L 195.98 571.61 L 196.80 572.43 L 203.33 572.43 L 204.15 573.24 L 209.86 573.24 L 210.68 574.06 L 215.58 574.06 L 216.40 574.88 L 221.30 574.88 L 226.19 576.51 L 230.28 576.51 L 231.09 577.33 L 238.44 578.14 L 242.53 579.78 L 245.79 579.78 L 246.61 580.59 L 258.86 583.04 L 262.12 584.68 L 264.57 584.68 L 291.52 593.66 L 299.69 597.74 L 305.40 599.37 L 321.74 607.54 L 323.37 609.17 L 327.45 610.81 L 335.62 616.52 L 338.07 617.34 L 355.22 631.22 L 364.20 641.02 L 369.91 649.19 L 374.81 658.99 L 376.45 663.89 L 376.45 666.33 L 377.26 667.15 L 377.26 670.42 L 378.08 671.23 L 378.08 688.38 L 377.26 689.20 L 377.26 692.47 L 376.45 693.28 L 376.45 695.73 L 374.81 700.63 L 368.28 712.88 L 356.85 725.13 L 350.32 729.21 L 342.97 731.66 L 334.80 731.66 L 333.98 730.85 L 330.72 730.85 L 329.90 730.03 L 327.45 730.03 L 317.65 725.13 L 306.22 716.96 L 287.44 698.18 L 274.37 681.03 L 263.76 663.89 L 253.96 644.29 L 253.96 642.65 L 249.88 634.49 L 244.16 617.34 L 244.16 614.89 L 241.71 607.54 L 241.71 604.27 L 240.08 601.01 L 236.81 601.01 L 235.99 600.19 L 232.73 600.19 L 227.83 598.56 L 223.74 598.56 L 222.93 597.74 L 218.85 597.74 L 218.03 596.93 L 206.60 596.11 L 205.78 595.29 L 188.63 594.48 L 187.81 593.66 L 174.75 593.66 L 173.93 592.84 L 168.22 592.84 L 167.40 593.66 L 169.03 602.64 L 175.57 622.24 L 175.57 624.69 L 178.83 632.04 L 180.47 638.57 L 183.73 645.10 L 183.73 646.74 L 188.63 656.54 L 188.63 658.17 L 200.88 682.67 L 202.51 684.30 L 204.15 688.38 L 205.78 690.02 L 211.50 700.63 L 221.30 715.33 L 240.89 740.64 L 253.14 753.71 L 253.14 754.53 L 268.66 770.04 L 269.47 770.04 L 286.62 785.56 L 301.32 796.99 L 321.74 810.87 L 333.98 817.40 L 335.62 819.04 L 354.40 828.84 L 356.03 828.84 L 365.01 833.74 L 366.65 833.74 L 374.00 837.00 L 376.45 836.19 L 377.26 834.55 L 377.26 832.92 L 378.90 830.47 L 378.90 828.84 L 380.53 826.39 L 380.53 824.75 L 386.25 812.50 L 388.70 804.34 L 390.33 801.89 L 390.33 800.26 L 398.49 781.47 L 399.31 777.39 L 401.76 773.31 L 402.58 769.22 L 408.29 756.98 L 412.38 744.73 L 414.83 740.64 L 415.64 736.56 L 417.28 734.11 L 417.28 732.48 L 418.91 730.03 L 418.91 728.40 L 427.07 709.61 L 427.89 705.53 L 434.42 690.83 L 435.24 686.75 L 436.87 684.30 L 440.96 672.05 L 447.49 657.35 L 448.31 653.27 L 449.94 650.82 L 452.39 642.65 L 455.66 636.12 L 456.47 632.04 L 459.74 625.51 L 460.56 621.42 L 466.27 608.36 L 467.09 604.27 L 468.72 601.82 L 472.80 589.58 L 476.07 583.04 L 476.89 578.96 L 480.15 572.43 L 483.42 561.81 L 486.69 555.28 L 488.32 548.75 L 489.95 546.30 L 494.85 531.60 L 496.48 529.15 L 498.12 522.62 L 503.83 516.08 L 507.92 514.45 L 516.90 514.45 L 521.80 516.90 L 525.88 521.80 L 532.41 541.40 L 535.68 547.93 L 536.50 552.01 L 538.13 554.46 L 541.40 565.08 L 544.66 571.61 L 550.38 588.76 L 552.01 591.21 L 554.46 599.37 L 557.73 605.91 L 559.36 612.44 L 561.00 614.89 L 563.44 623.06 L 569.16 636.12 L 569.98 640.20 L 573.24 646.74 L 574.06 650.82 L 575.69 653.27 L 576.51 657.35 L 578.14 659.80 L 578.96 663.89 L 583.04 672.87 L 584.68 679.40 L 587.13 683.48 L 588.76 690.02 L 594.48 703.08 L 598.56 716.15 L 601.82 722.68 L 607.54 739.83 L 610.81 746.36 L 612.44 752.89 L 617.34 763.51 L 623.87 783.11 L 627.14 789.64 L 627.96 793.72 L 629.59 796.17 L 630.41 800.26 L 632.04 802.70 L 637.75 819.85 L 641.02 826.39 L 642.65 832.92 L 645.10 837.00 L 650.82 836.19 L 653.27 834.55 L 658.99 832.92 L 685.93 819.85 L 718.60 799.44 L 739.83 783.11 L 751.26 772.49 L 752.08 772.49 L 780.66 743.09 L 801.07 716.96 L 812.50 699.81 L 813.32 697.37 L 819.85 687.57 L 821.49 683.48 L 823.12 681.85 L 833.74 660.62 L 833.74 658.99 L 837.00 653.27 L 837.00 651.64 L 839.45 647.55 L 841.90 639.39 L 843.53 636.94 L 845.17 630.41 L 848.43 623.06 L 848.43 620.61 L 850.07 617.34 L 851.70 609.17 L 853.33 605.91 L 855.78 593.66 L 854.97 592.84 L 852.52 592.84 L 851.70 593.66 L 835.37 593.66 L 834.55 594.48 L 817.40 595.29 L 816.59 596.11 L 810.87 596.11 L 810.05 596.93 L 800.26 597.74 L 799.44 598.56 L 795.36 598.56 L 794.54 599.37 L 783.92 601.01 L 782.29 603.46 L 782.29 606.72 L 781.47 607.54 L 781.47 610.81 L 779.02 617.34 L 779.02 619.79 L 774.12 634.49 L 770.04 642.65 L 770.04 644.29 L 760.24 663.89 L 747.99 683.48 L 735.74 699.00 L 718.60 716.15 L 704.71 725.95 L 693.28 730.85 L 689.20 730.85 L 688.38 731.66 L 679.40 730.85 L 674.50 729.21 L 667.97 725.13 L 658.17 715.33 L 650.00 700.63 L 648.37 695.73 L 648.37 693.28 L 647.55 692.47 L 646.74 682.67 L 645.92 681.85 L 646.74 669.60 L 647.55 668.78 L 647.55 665.52 L 650.00 658.17 L 654.90 648.37 L 659.80 641.02 L 665.52 635.30 L 665.52 634.49 L 676.13 624.69 L 685.93 617.34 L 688.38 616.52 L 690.83 614.07 L 720.23 598.56 L 721.86 598.56 L 734.11 592.84 L 753.71 586.31 L 761.88 584.68 L 765.14 583.04 L 767.59 583.04 L 768.41 582.23 L 770.86 582.23 L 771.67 581.41 L 774.12 581.41 L 781.47 578.96 L 796.99 576.51 L 797.81 575.69 L 801.89 575.69 L 802.70 574.88 L 806.79 574.88 L 807.60 574.06 L 812.50 574.06 L 813.32 573.24 L 819.04 573.24 L 819.85 572.43 L 826.39 572.43 L 827.20 571.61 L 858.23 569.98 L 859.87 569.16 L 860.68 567.53 L 860.68 563.44 L 861.50 562.63 L 861.50 559.36 L 859.87 556.91 L 850.07 552.01 L 844.35 547.93 L 837.00 544.66 L 835.37 543.03 L 807.60 529.15 L 805.97 529.15 L 787.19 520.17 L 779.02 517.72 L 774.94 515.27 L 768.41 513.63 L 761.88 510.37 L 750.44 507.10 L 743.09 503.83 L 740.64 503.83 L 738.19 502.20 L 735.74 502.20 L 730.03 499.75 L 727.58 499.75 L 721.86 497.30 L 719.41 497.30 L 716.15 495.67 L 707.16 494.04 L 703.90 492.40 L 701.45 492.40 L 700.63 491.59 L 698.18 491.59 L 690.83 489.14 L 687.57 489.14 L 683.48 487.50 L 680.22 487.50 L 676.13 485.87 L 672.87 485.87 L 672.05 485.05 L 668.78 485.05 L 667.97 484.24 L 664.70 484.24 L 663.89 483.42 L 660.62 483.42 L 655.72 481.79 L 641.84 480.15 L 641.02 479.34 L 631.22 478.52 L 630.41 477.70 L 625.51 477.70 L 624.69 476.89 L 619.79 476.89 L 618.97 476.07 L 613.26 476.07 L 612.44 475.25 L 605.91 475.25 L 605.09 474.44 L 598.56 474.44 L 597.74 473.62 L 590.39 473.62 L 589.58 472.80 L 569.98 471.99 L 569.16 471.17 L 557.73 471.17 L 556.91 470.35 L 538.95 470.35 L 538.13 469.54 L 488.32 469.54 L 487.50 470.35 L 469.54 470.35 L 468.72 471.17 L 444.22 471.99 L 443.41 472.80 L 419.73 474.44 L 418.91 475.25 L 413.19 475.25 L 412.38 476.07 L 406.66 476.07 L 405.84 476.89 L 400.13 476.89 L 399.31 477.70 L 388.70 478.52 L 387.88 479.34 L 374.00 480.97 L 373.18 481.79 L 365.01 482.60 L 364.20 483.42 L 348.68 485.87 L 344.60 487.50 L 337.25 488.32 L 336.43 489.14 L 333.98 489.14 L 333.17 489.95 L 330.72 489.95 L 329.90 490.77 L 311.12 494.85 L 302.14 498.12 L 296.42 498.93 L 288.26 502.20 L 285.81 502.20 L 266.21 508.73 L 263.76 510.37 L 257.22 512.00 L 244.16 517.72 L 242.53 517.72 L 238.44 520.17 L 236.81 520.17 L 222.93 526.70 L 221.30 526.70 L 213.95 530.78 L 212.31 530.78 L 189.45 542.21 L 187.81 543.85 L 177.20 548.75 L 171.48 552.83 L 164.13 556.10 Z M 511.18 277.64 L 506.28 293.15 L 504.65 295.60 L 503.02 302.14 L 501.38 304.59 L 498.93 313.57 L 497.30 316.02 L 494.85 325.00 L 493.22 327.45 L 490.77 336.43 L 488.32 339.70 L 420.54 361.75 L 420.54 362.56 L 425.44 363.38 L 428.71 365.01 L 431.16 365.01 L 434.42 366.65 L 436.87 366.65 L 440.14 368.28 L 442.59 368.28 L 448.31 370.73 L 450.76 370.73 L 454.02 372.36 L 456.47 372.36 L 459.74 374.00 L 462.19 374.00 L 465.45 375.63 L 467.90 375.63 L 473.62 378.08 L 476.07 378.08 L 488.32 382.16 L 489.95 383.80 L 490.77 387.06 L 492.40 389.51 L 511.18 445.86 L 512.00 445.86 L 527.52 398.49 L 529.15 396.04 L 532.41 385.43 L 534.86 382.16 L 547.11 378.08 L 549.56 378.08 L 555.28 375.63 L 557.73 375.63 L 566.71 372.36 L 569.16 372.36 L 574.88 369.91 L 577.33 369.91 L 580.59 368.28 L 583.04 368.28 L 595.29 364.20 L 603.46 362.56 L 603.46 361.75 L 601.01 361.75 L 598.56 360.11 L 596.11 360.11 L 581.41 355.22 L 578.96 353.58 L 576.51 353.58 L 534.86 339.70 L 531.60 333.98 L 519.35 297.24 L 515.27 288.26 L 512.00 277.64 Z M 158.42 485.87 L 157.60 517.72 L 158.42 518.53 L 158.42 534.05 L 159.23 534.86 L 164.95 532.41 L 170.67 528.33 L 193.53 516.90 L 198.43 513.63 L 200.06 513.63 L 212.31 507.10 L 218.03 505.47 L 225.38 501.38 L 237.63 497.30 L 238.44 496.48 L 238.44 486.69 L 239.26 485.87 L 240.08 471.17 L 240.89 470.35 L 240.89 466.27 L 241.71 465.45 L 241.71 461.37 L 242.53 460.56 L 242.53 456.47 L 243.34 455.66 L 244.16 448.31 L 245.79 444.22 L 245.79 440.96 L 246.61 440.14 L 247.43 434.42 L 249.06 431.16 L 249.06 428.71 L 250.69 425.44 L 250.69 422.99 L 254.78 410.74 L 256.41 408.29 L 257.22 404.21 L 262.94 391.96 L 262.94 390.33 L 266.21 384.61 L 266.21 382.98 L 281.72 354.40 L 298.87 329.08 L 316.02 308.67 L 334.80 289.89 L 335.62 289.89 L 342.97 282.54 L 351.95 275.19 L 374.81 258.86 L 377.26 258.04 L 385.43 252.33 L 392.78 249.06 L 394.41 247.43 L 410.74 239.26 L 412.38 239.26 L 424.63 233.54 L 449.12 225.38 L 451.57 225.38 L 458.92 222.93 L 462.19 222.93 L 466.27 221.30 L 474.44 220.48 L 475.25 219.66 L 486.69 218.85 L 487.50 218.03 L 494.04 218.03 L 494.85 217.21 L 519.35 216.40 L 520.17 217.21 L 534.05 217.21 L 534.86 218.03 L 541.40 218.03 L 542.21 218.85 L 552.83 219.66 L 553.65 220.48 L 557.73 220.48 L 565.08 222.93 L 568.34 222.93 L 569.16 223.74 L 574.88 224.56 L 578.14 226.19 L 580.59 226.19 L 592.84 230.28 L 595.29 231.91 L 599.37 232.73 L 607.54 236.81 L 609.17 236.81 L 613.26 239.26 L 614.89 239.26 L 635.30 249.88 L 650.00 259.67 L 652.45 260.49 L 654.90 262.94 L 667.15 271.11 L 688.38 289.07 L 710.43 311.94 L 730.85 338.07 L 746.36 362.56 L 759.43 388.70 L 759.43 390.33 L 761.88 394.41 L 761.88 396.04 L 766.78 406.66 L 773.31 426.26 L 773.31 428.71 L 774.94 431.97 L 774.94 434.42 L 775.76 435.24 L 775.76 437.69 L 778.21 445.04 L 778.21 448.31 L 779.02 449.12 L 779.02 452.39 L 780.66 457.29 L 780.66 461.37 L 781.47 462.19 L 782.29 472.80 L 783.11 473.62 L 784.74 496.48 L 792.09 499.75 L 793.72 499.75 L 796.17 501.38 L 797.81 501.38 L 801.89 503.83 L 803.52 503.83 L 819.85 512.00 L 821.49 512.00 L 846.80 525.07 L 848.43 526.70 L 852.52 528.33 L 854.15 529.96 L 863.95 534.86 L 863.95 525.88 L 864.77 525.07 L 864.77 493.22 L 863.95 492.40 L 863.95 480.97 L 863.13 480.15 L 863.13 471.99 L 862.32 471.17 L 862.32 464.64 L 861.50 463.82 L 860.68 453.21 L 859.87 452.39 L 859.87 448.31 L 859.05 447.49 L 859.05 444.22 L 858.23 443.41 L 858.23 440.14 L 857.42 439.32 L 857.42 436.06 L 855.78 431.97 L 855.78 428.71 L 854.97 427.89 L 854.97 424.63 L 854.15 423.81 L 852.52 414.83 L 850.88 411.56 L 849.25 403.39 L 842.72 383.80 L 841.08 381.35 L 840.27 377.26 L 836.19 369.10 L 834.55 363.38 L 831.29 357.67 L 831.29 356.03 L 815.77 325.82 L 792.91 290.70 L 771.67 264.57 L 760.24 253.14 L 760.24 252.33 L 743.91 236.81 L 728.40 223.74 L 712.06 211.50 L 683.48 193.53 L 661.44 182.10 L 659.80 182.10 L 650.82 177.20 L 649.19 177.20 L 645.10 174.75 L 632.85 170.67 L 630.41 169.03 L 610.81 162.50 L 602.64 160.87 L 599.37 159.23 L 596.11 159.23 L 589.58 156.78 L 586.31 156.78 L 582.23 155.15 L 578.96 155.15 L 574.06 153.52 L 569.98 153.52 L 569.16 152.70 L 564.26 152.70 L 563.44 151.89 L 558.55 151.89 L 557.73 151.07 L 552.01 151.07 L 551.20 150.25 L 544.66 150.25 L 543.85 149.44 L 534.05 149.44 L 533.23 148.62 L 495.67 148.62 L 494.85 149.44 L 485.05 149.44 L 484.24 150.25 L 477.70 150.25 L 476.89 151.07 L 471.17 151.07 L 470.35 151.89 L 465.45 151.89 L 464.64 152.70 L 460.56 152.70 L 459.74 153.52 L 454.84 153.52 L 454.02 154.33 L 438.51 156.78 L 437.69 157.60 L 422.18 160.87 L 418.91 162.50 L 416.46 162.50 L 391.96 170.67 L 389.51 172.30 L 379.71 175.57 L 374.00 178.83 L 372.36 178.83 L 366.65 182.10 L 365.01 182.10 L 333.17 199.25 L 324.19 205.78 L 316.84 209.86 L 298.05 223.74 L 276.82 241.71 L 253.96 264.57 L 253.96 265.39 L 242.53 277.64 L 226.19 298.87 L 206.60 329.08 L 189.45 362.56 L 189.45 364.20 L 187.00 368.28 L 187.00 369.91 L 184.55 374.00 L 182.10 382.16 L 178.83 388.70 L 174.75 400.94 L 174.75 403.39 L 172.30 409.11 L 172.30 411.56 L 170.67 414.83 L 170.67 417.28 L 169.85 418.09 L 169.85 420.54 L 169.03 421.36 L 169.03 423.81 L 166.58 431.16 L 166.58 434.42 L 165.77 435.24 L 163.32 450.76 L 162.50 451.57 L 162.50 456.47 L 161.68 457.29 L 160.87 467.90 L 160.05 468.72 L 160.05 476.07 L 159.23 476.89 L 159.23 485.05 Z" fill="url(#atlasMark)" fill-rule="evenodd"/>
++</svg>
++

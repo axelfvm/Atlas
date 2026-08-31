@@ -1,0 +1,1023 @@
+diff --git a/chrome/browser/resources/settings/BUILD.gn b/chrome/browser/resources/settings/BUILD.gn
+index 041905516f82d..7d2a33446a60f 100644
+--- a/chrome/browser/resources/settings/BUILD.gn
++++ b/chrome/browser/resources/settings/BUILD.gn
+@@ -102,6 +102,7 @@ build_webui("build") {
+     "glic_page/glic_login_permissions_page.ts",
+     "glic_page/glic_subpage.ts",
+     "privacy_page/cookies_page.ts",
++    "privacy_page/drm_page.ts",
+     "privacy_page/do_not_track_toggle.ts",
+     "privacy_page/personalization_options.ts",
+     "privacy_page/privacy_guide/privacy_guide_completion_fragment.ts",
+@@ -355,6 +356,7 @@ build_webui("build") {
+     "people_page/sync_page.html.ts",
+     "people_page/sync_page.ts",
+     "privacy_page/hats_browser_proxy.ts",
++    "privacy_page/drm_browser_proxy.ts",
+     "privacy_page/privacy_guide/constants.ts",
+     "privacy_page/privacy_guide/privacy_guide_availability_mixin.ts",
+     "privacy_page/privacy_guide/privacy_guide_browser_proxy.ts",
+diff --git a/chrome/browser/resources/settings/privacy_page/privacy_page.html b/chrome/browser/resources/settings/privacy_page/privacy_page.html
+index e7b77860d8216..4ed832219039a 100644
+--- a/chrome/browser/resources/settings/privacy_page/privacy_page.html
++++ b/chrome/browser/resources/settings/privacy_page/privacy_page.html
+@@ -38,6 +38,11 @@
+         sub-label="$i18n{securityPageDescription}"
+         on-click="onSecurityPageClick_"
+         role-description="$i18n{subpageArrowRoleDescription}"></cr-link-row>
++    <cr-link-row id="drmLinkRow" start-icon="privacy:sync-saved-locally"
++        class="hr" label="$i18n{atlasDrmPageTitle}"
++        sub-label="$i18n{atlasDrmProtectedContentDescription}"
++        on-click="onDrmClick_"
++        role-description="$i18n{subpageArrowRoleDescription}"></cr-link-row>
+     <cr-link-row id="siteSettingsLinkRow" start-icon="privacy:page-info"
+         class="hr" label="$i18n{siteSettings}"
+         sub-label="$i18n{siteSettingsSublabel}"
+diff --git a/chrome/browser/resources/settings/privacy_page/privacy_page.ts b/chrome/browser/resources/settings/privacy_page/privacy_page.ts
+index 22c524fdbab12..7aef26c47cc22 100644
+--- a/chrome/browser/resources/settings/privacy_page/privacy_page.ts
++++ b/chrome/browser/resources/settings/privacy_page/privacy_page.ts
+@@ -43,6 +43,7 @@ export interface SettingsPrivacyPageElement {
+     clearBrowsingData: CrLinkRowElement,
+     siteSettingsLinkRow: CrLinkRowElement,
+     securityLinkRow: CrLinkRowElement,
++    drmLinkRow: CrLinkRowElement,
+   };
+ }
+ 
+@@ -152,6 +153,11 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
+     Router.getInstance().navigateTo(routes.SECURITY);
+   }
+ 
++  private onDrmClick_() {
++    this.interactedWithPage_();
++    Router.getInstance().navigateTo(routes.DRM);
++  }
++
+   private onPrivacyGuideClick_() {
+     this.metricsBrowserProxy_.recordPrivacyGuideEntryExitHistogram(
+         PrivacyGuideInteractions.SETTINGS_LINK_ROW_ENTRY);
+@@ -203,6 +209,10 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
+       map.set(routes.SECURITY.path, '#securityLinkRow');
+     }
+ 
++    if (routes.DRM) {
++      map.set(routes.DRM.path, '#drmLinkRow');
++    }
++
+     if (routes.SITE_SETTINGS) {
+       map.set(routes.SITE_SETTINGS.path, '#siteSettingsLinkRow');
+     }
+@@ -214,6 +224,9 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
+   override getAssociatedControlFor(childViewId: string): HTMLElement {
+     let triggerId: string|null = null;
+     switch (childViewId) {
++      case 'drm':
++        triggerId = 'drmLinkRow';
++        break;
+       case 'cookies':
+         triggerId = 'thirdPartyCookiesLinkRow';
+         break;
+diff --git a/chrome/browser/resources/settings/privacy_page/privacy_page_index.html b/chrome/browser/resources/settings/privacy_page/privacy_page_index.html
+index 10ce6554c5829..4b5859a547797 100644
+--- a/chrome/browser/resources/settings/privacy_page/privacy_page_index.html
++++ b/chrome/browser/resources/settings/privacy_page/privacy_page_index.html
+@@ -49,6 +49,13 @@
+ 
+   <!-- Keep entries below sorted based on the route name. -->
+ 
++  <template is="dom-if" if="[[renderView_(
++      routes_.DRM, currentRoute, inSearchMode)]]" update-when-false>
++    <settings-drm-page slot="view" id="drm" data-parent-view-id="privacy"
++        route-path$="[[routes_.DRM.path]]">
++    </settings-drm-page>
++  </template>
++
+   <template is="dom-if" if="[[renderView_(
+       routes_.COOKIES, currentRoute, inSearchMode)]]"
+       update-when-false>
+diff --git a/chrome/browser/resources/settings/privacy_page/privacy_page_index.ts b/chrome/browser/resources/settings/privacy_page/privacy_page_index.ts
+index 9d895e784e628..692267f8a6b23 100644
+--- a/chrome/browser/resources/settings/privacy_page/privacy_page_index.ts
++++ b/chrome/browser/resources/settings/privacy_page/privacy_page_index.ts
+@@ -8,6 +8,7 @@ import '../safety_hub/safety_hub_entry_point.js';
+ import '../settings_page/settings_section.js';
+ import '../settings_shared.css.js';
+ import './privacy_guide/privacy_guide_promo.js';
++import './drm_page.js';
+ import './privacy_page.js';
+ 
+ import {PrefsMixin} from '/shared/settings/prefs/prefs_mixin.js';
+diff --git a/chrome/browser/resources/settings/route.ts b/chrome/browser/resources/settings/route.ts
+index 2aaa938c7e14a..4b116b4dddcbc 100644
+--- a/chrome/browser/resources/settings/route.ts
++++ b/chrome/browser/resources/settings/route.ts
+@@ -29,6 +29,7 @@ function addPrivacyChildRoutes(r: Partial<SettingsRoutes>) {
+   }
+   r.SITE_SETTINGS = r.PRIVACY.createChild('/content');
+   r.SECURITY = r.PRIVACY.createChild('/security');
++  r.DRM = r.PRIVACY.createChild('/drm');
+ 
+   r.COOKIES = r.PRIVACY.createChild('/cookies');
+ 
+diff --git a/chrome/browser/resources/settings/router.ts b/chrome/browser/resources/settings/router.ts
+index a6b043271a731..13d0d1067b579 100644
+--- a/chrome/browser/resources/settings/router.ts
++++ b/chrome/browser/resources/settings/router.ts
+@@ -32,6 +32,7 @@ export interface SettingsRoutes {
+   DEFAULT_BROWSER: Route;
+   DICTATION: Route;
+   DOWNLOADS: Route;
++  DRM: Route;
+   EDIT_DICTIONARY: Route;
+   FONTS: Route;
+   GEMINI: Route;
+diff --git a/chrome/browser/ui/webui/settings/BUILD.gn b/chrome/browser/ui/webui/settings/BUILD.gn
+index 18ee1a8924adf..374e9c44338db 100644
+--- a/chrome/browser/ui/webui/settings/BUILD.gn
++++ b/chrome/browser/ui/webui/settings/BUILD.gn
+@@ -12,6 +12,7 @@ source_set("settings") {
+   sources = [
+     "about_handler.h",
+     "accessibility_main_handler.h",
++    "atlas_drm_handler.h",
+     "appearance_handler.h",
+     "browser_lifetime_handler.h",
+     "captions_handler.h",
+@@ -140,6 +141,7 @@ source_set("impl") {
+   sources = [
+     "about_handler.cc",
+     "accessibility_main_handler.cc",
++    "atlas_drm_handler.cc",
+     "appearance_handler.cc",
+     "browser_lifetime_handler.cc",
+     "captions_handler.cc",
+@@ -760,4 +762,4 @@ source_set("interactive_ui_tests") {
+       "//ui/views",
+     ]
+   }
+-}
+\ No newline at end of file
++}
+diff --git a/chrome/browser/ui/webui/settings/settings_ui.cc b/chrome/browser/ui/webui/settings/settings_ui.cc
+index a7f04af1d7e7e..017813f3126a0 100644
+--- a/chrome/browser/ui/webui/settings/settings_ui.cc
++++ b/chrome/browser/ui/webui/settings/settings_ui.cc
+@@ -64,6 +64,7 @@
+ #include "chrome/browser/ui/webui/settings/about_handler.h"
+ #include "chrome/browser/ui/webui/settings/accessibility_main_handler.h"
+ #include "chrome/browser/ui/webui/settings/appearance_handler.h"
++#include "chrome/browser/ui/webui/settings/atlas_drm_handler.h"
+ #include "chrome/browser/ui/webui/settings/browser_lifetime_handler.h"
+ #include "chrome/browser/ui/webui/settings/dictation_handler.h"
+ #include "chrome/browser/ui/webui/settings/downloads_handler.h"
+@@ -253,6 +254,7 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+                                                      features::kAXTreeFixing));
+ 
+   AddSettingsPageUIHandler(std::make_unique<AccessibilityMainHandler>());
++  AddSettingsPageUIHandler(std::make_unique<AtlasDrmHandler>());
+   AddSettingsPageUIHandler(std::make_unique<BrowserLifetimeHandler>());
+   AddSettingsPageUIHandler(
+       std::make_unique<ClearBrowsingDataHandler>(web_ui, profile));
+@@ -485,6 +487,41 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+ #endif
+ 
+   AddLocalizedStrings(html_source, profile, web_ui->GetWebContents());
++  html_source->AddString("atlasDrmPageTitle", u"DRM");
++  html_source->AddString(
++      "atlasDrmPageDescription",
++      u"Gerencie a reprodução de conteúdo protegido e importe uma cópia "
++      u"local do Widevine já instalada neste computador.");
++  html_source->AddString("atlasDrmStatusTitle", u"Componente Widevine");
++  html_source->AddString("atlasDrmInstalledVersion", u"Instalado: versão $1");
++  html_source->AddString("atlasDrmNotInstalled", u"Não instalado");
++  html_source->AddString("atlasDrmRemoveButton", u"Remover");
++  html_source->AddString("atlasDrmProtectedContentTitle",
++                         u"Conteúdo protegido");
++  html_source->AddString(
++      "atlasDrmProtectedContentDescription",
++      u"Ative ou bloqueie a reprodução de mídia protegida no Atlas.");
++  html_source->AddString("atlasDrmSourcesTitle", u"Navegadores detectados");
++  html_source->AddString("atlasDrmDetectedVersion", u"Widevine versão");
++  html_source->AddString("atlasDrmImportButton", u"Importar");
++  html_source->AddString(
++      "atlasDrmNoSources",
++      u"Nenhuma instalação compatível foi encontrada no Edge ou Chrome.");
++  html_source->AddString(
++      "atlasDrmImportSuccess",
++      u"Widevine $1 importado de $2. Reinicie o Atlas para aplicar.");
++  html_source->AddString(
++      "atlasDrmRemoveSuccess",
++      u"Widevine removido. Reinicie o Atlas para aplicar.");
++  html_source->AddString("atlasDrmRestartButton", u"Reiniciar Atlas");
++  html_source->AddString(
++      "atlasDrmLegalNotice",
++      u"O Widevine é um componente proprietário de terceiros. A importação "
++      u"acontece somente após sua confirmação, permanece neste computador e "
++      u"não inclui o componente no código, instalador ou atualizações do Atlas.");
++  html_source->AddString(
++      "atlasDrmGenericError",
++      u"Não foi possível concluir a operação. Tente novamente.");
+   AddSecurityData(html_source);
+ 
+   ManagedUIHandler::Initialize(web_ui, html_source);
+diff --git a/chrome/browser/ui/webui/settings/atlas_drm_handler.h b/chrome/browser/ui/webui/settings/atlas_drm_handler.h
+new file mode 100644
+index 0000000000000..62d97b69af1d5
+--- /dev/null
++++ b/chrome/browser/ui/webui/settings/atlas_drm_handler.h
+@@ -0,0 +1,43 @@
++// Copyright 2026 The Atlas Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#ifndef CHROME_BROWSER_UI_WEBUI_SETTINGS_ATLAS_DRM_HANDLER_H_
++#define CHROME_BROWSER_UI_WEBUI_SETTINGS_ATLAS_DRM_HANDLER_H_
++
++#include "base/memory/weak_ptr.h"
++#include "base/values.h"
++#include "chrome/browser/ui/webui/settings/settings_page_ui_handler.h"
++
++namespace settings {
++
++// Handles local Widevine discovery and import for chrome://settings/drm.
++// Atlas never downloads or redistributes the proprietary CDM through this
++// handler; it only copies a user-selected installation already present on the
++// same computer.
++class AtlasDrmHandler : public SettingsPageUIHandler {
++ public:
++  AtlasDrmHandler();
++  AtlasDrmHandler(const AtlasDrmHandler&) = delete;
++  AtlasDrmHandler& operator=(const AtlasDrmHandler&) = delete;
++  ~AtlasDrmHandler() override;
++
++  // SettingsPageUIHandler:
++  void RegisterMessages() override;
++  void OnJavascriptAllowed() override {}
++  void OnJavascriptDisallowed() override;
++
++ private:
++  void HandleGetStatus(const base::ListValue& args);
++  void HandleDetectSources(const base::ListValue& args);
++  void HandleImport(const base::ListValue& args);
++  void HandleRemove(const base::ListValue& args);
++
++  void ResolveResult(base::Value callback_id, base::DictValue result);
++
++  base::WeakPtrFactory<AtlasDrmHandler> weak_ptr_factory_{this};
++};
++
++}  // namespace settings
++
++#endif  // CHROME_BROWSER_UI_WEBUI_SETTINGS_ATLAS_DRM_HANDLER_H_
+diff --git a/chrome/browser/ui/webui/settings/atlas_drm_handler.cc b/chrome/browser/ui/webui/settings/atlas_drm_handler.cc
+new file mode 100644
+index 0000000000000..2cc6499ae3e1f
+--- /dev/null
++++ b/chrome/browser/ui/webui/settings/atlas_drm_handler.cc
+@@ -0,0 +1,333 @@
++// Copyright 2026 The Atlas Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "chrome/browser/ui/webui/settings/atlas_drm_handler.h"
++
++#include <optional>
++#include <string>
++#include <utility>
++#include <vector>
++
++#include "base/check.h"
++#include "base/files/file_enumerator.h"
++#include "base/files/file_path.h"
++#include "base/files/file_util.h"
++#include "base/functional/bind.h"
++#include "base/native_library.h"
++#include "base/path_service.h"
++#include "base/task/thread_pool.h"
++#include "base/values.h"
++#include "base/version.h"
++#include "build/build_config.h"
++#include "chrome/common/chrome_paths.h"
++#include "components/cdm/common/cdm_manifest.h"
++#include "content/public/browser/web_ui.h"
++#include "media/base/cdm_capability.h"
++#include "media/cdm/cdm_paths.h"
++#include "third_party/widevine/cdm/widevine_cdm_common.h"
++
++namespace settings {
++namespace {
++
++constexpr base::FilePath::CharType kAtlasManagedMarker[] =
++    FILE_PATH_LITERAL(".atlas-managed");
++
++struct DrmSource {
++  std::string id;
++  std::string name;
++  base::FilePath root;
++};
++
++struct ValidCdm {
++  base::Version version;
++  base::FilePath path;
++};
++
++base::FilePath GetAtlasWidevineRoot() {
++  base::FilePath user_data;
++  if (!base::PathService::Get(chrome::DIR_USER_DATA, &user_data)) {
++    return {};
++  }
++  return user_data.AppendASCII(kWidevineCdmBaseDirectory);
++}
++
++std::vector<DrmSource> GetKnownSources() {
++#if BUILDFLAG(IS_WIN)
++  base::FilePath local_app_data;
++  if (!base::PathService::Get(base::DIR_LOCAL_APP_DATA, &local_app_data)) {
++    return {};
++  }
++
++  return {
++      {"edge", "Microsoft Edge",
++       local_app_data.Append(FILE_PATH_LITERAL("Microsoft"))
++           .Append(FILE_PATH_LITERAL("Edge"))
++           .Append(FILE_PATH_LITERAL("User Data"))
++           .AppendASCII(kWidevineCdmBaseDirectory)},
++      {"chrome", "Google Chrome",
++       local_app_data.Append(FILE_PATH_LITERAL("Google"))
++           .Append(FILE_PATH_LITERAL("Chrome"))
++           .Append(FILE_PATH_LITERAL("User Data"))
++           .AppendASCII(kWidevineCdmBaseDirectory)},
++  };
++#else
++  return {};
++#endif
++}
++
++std::optional<ValidCdm> ValidateCdmDirectory(const base::FilePath& path) {
++  if (!base::DirectoryExists(path)) {
++    return std::nullopt;
++  }
++
++  const base::Version directory_version(path.BaseName().AsUTF8Unsafe());
++  if (!directory_version.IsValid()) {
++    return std::nullopt;
++  }
++
++  media::CdmCapability capability;
++  if (!ParseCdmManifestFromPath(path.Append(FILE_PATH_LITERAL("manifest.json")),
++                                &capability) ||
++      !capability.version.IsValid() ||
++      capability.version != directory_version) {
++    return std::nullopt;
++  }
++
++  const base::FilePath library =
++      media::GetPlatformSpecificDirectory(path).AppendASCII(
++          base::GetNativeLibraryName(kWidevineCdmLibraryName));
++  if (!base::PathExists(library)) {
++    return std::nullopt;
++  }
++
++#if BUILDFLAG(IS_WIN)
++  if (!base::PathExists(library.AddExtension(FILE_PATH_LITERAL(".sig")))) {
++    return std::nullopt;
++  }
++#endif
++
++  return ValidCdm{directory_version, path};
++}
++
++std::optional<ValidCdm> FindLatestValidCdm(const base::FilePath& root) {
++  if (!base::DirectoryExists(root)) {
++    return std::nullopt;
++  }
++
++  std::optional<ValidCdm> latest;
++  base::FileEnumerator directories(root, false,
++                                   base::FileEnumerator::DIRECTORIES);
++  for (base::FilePath path = directories.Next(); !path.empty();
++       path = directories.Next()) {
++    std::optional<ValidCdm> candidate = ValidateCdmDirectory(path);
++    if (candidate &&
++        (!latest || latest->version.CompareTo(candidate->version) < 0)) {
++      latest = std::move(candidate);
++    }
++  }
++  return latest;
++}
++
++base::DictValue ErrorResult(std::string code, std::string message) {
++  base::DictValue result;
++  result.Set("success", false);
++  result.Set("errorCode", std::move(code));
++  result.Set("message", std::move(message));
++  return result;
++}
++
++base::DictValue GetStatusOnWorker() {
++  base::DictValue result;
++  result.Set("success", true);
++  const std::optional<ValidCdm> installed =
++      FindLatestValidCdm(GetAtlasWidevineRoot());
++  result.Set("installed", installed.has_value());
++  if (installed) {
++    result.Set("version", installed->version.GetString());
++    result.Set("managed",
++               base::PathExists(installed->path.Append(kAtlasManagedMarker)));
++  } else {
++    result.Set("version", "");
++    result.Set("managed", false);
++  }
++  return result;
++}
++
++base::DictValue DetectSourcesOnWorker() {
++  base::ListValue sources;
++  for (const DrmSource& source : GetKnownSources()) {
++    const std::optional<ValidCdm> cdm = FindLatestValidCdm(source.root);
++    if (!cdm) {
++      continue;
++    }
++    base::DictValue item;
++    item.Set("id", source.id);
++    item.Set("name", source.name);
++    item.Set("version", cdm->version.GetString());
++    sources.Append(std::move(item));
++  }
++
++  base::DictValue result;
++  result.Set("success", true);
++  result.Set("sources", std::move(sources));
++  return result;
++}
++
++base::DictValue ImportOnWorker(std::string source_id) {
++  const auto sources = GetKnownSources();
++  const DrmSource* selected = nullptr;
++  for (const DrmSource& source : sources) {
++    if (source.id == source_id) {
++      selected = &source;
++      break;
++    }
++  }
++  if (!selected) {
++    return ErrorResult("unknown-source", "Fonte de DRM desconhecida.");
++  }
++
++  const std::optional<ValidCdm> source_cdm = FindLatestValidCdm(selected->root);
++  if (!source_cdm) {
++    return ErrorResult("invalid-source",
++                       "Nenhum componente Widevine válido foi encontrado.");
++  }
++
++  const base::FilePath destination_root = GetAtlasWidevineRoot();
++  if (destination_root.empty()) {
++    return ErrorResult("destination-unavailable",
++                       "O diretório de dados do Atlas não está disponível.");
++  }
++  if (!base::CreateDirectory(destination_root)) {
++    return ErrorResult("destination-unavailable",
++                       "Não foi possível preparar o diretório do Atlas.");
++  }
++
++  const base::FilePath destination =
++      destination_root.AppendASCII(source_cdm->version.GetString());
++  if (base::PathExists(destination)) {
++    if (!ValidateCdmDirectory(destination)) {
++      return ErrorResult(
++          "destination-conflict",
++          "Já existe uma instalação inválida com a mesma versão no Atlas.");
++    }
++  } else {
++    if (!base::CopyDirectory(source_cdm->path, destination, true) ||
++        !ValidateCdmDirectory(destination)) {
++      if (destination_root.IsParent(destination)) {
++        base::DeletePathRecursively(destination);
++      }
++      return ErrorResult("copy-failed",
++                         "Não foi possível copiar e validar o Widevine.");
++    }
++  }
++
++  if (!base::WriteFile(destination.Append(kAtlasManagedMarker), selected->id)) {
++    return ErrorResult(
++        "marker-failed",
++        "O componente foi copiado, mas não pôde ser gerenciado.");
++  }
++
++  base::DictValue result;
++  result.Set("success", true);
++  result.Set("version", source_cdm->version.GetString());
++  result.Set("sourceName", selected->name);
++  result.Set("restartRequired", true);
++  return result;
++}
++
++base::DictValue RemoveOnWorker(std::string version_string) {
++  const base::Version version(version_string);
++  if (!version.IsValid() || version.GetString() != version_string) {
++    return ErrorResult("invalid-version", "Versão de DRM inválida.");
++  }
++
++  const base::FilePath root = GetAtlasWidevineRoot();
++  const base::FilePath target = root.AppendASCII(version_string);
++  if (root.empty() || !root.IsParent(target) ||
++      !base::PathExists(target.Append(kAtlasManagedMarker))) {
++    return ErrorResult(
++        "not-managed",
++        "O Atlas só remove componentes importados por esta página.");
++  }
++  if (!base::DeletePathRecursively(target)) {
++    return ErrorResult("remove-failed",
++                       "Não foi possível remover o componente Widevine.");
++  }
++
++  base::DictValue result;
++  result.Set("success", true);
++  result.Set("restartRequired", true);
++  return result;
++}
++
++}  // namespace
++
++AtlasDrmHandler::AtlasDrmHandler() = default;
++AtlasDrmHandler::~AtlasDrmHandler() = default;
++
++void AtlasDrmHandler::RegisterMessages() {
++  web_ui()->RegisterMessageCallback(
++      "getAtlasDrmStatus",
++      base::BindRepeating(&AtlasDrmHandler::HandleGetStatus,
++                          base::Unretained(this)));
++  web_ui()->RegisterMessageCallback(
++      "detectAtlasDrmSources",
++      base::BindRepeating(&AtlasDrmHandler::HandleDetectSources,
++                          base::Unretained(this)));
++  web_ui()->RegisterMessageCallback(
++      "importAtlasDrm", base::BindRepeating(&AtlasDrmHandler::HandleImport,
++                                            base::Unretained(this)));
++  web_ui()->RegisterMessageCallback(
++      "removeAtlasDrm", base::BindRepeating(&AtlasDrmHandler::HandleRemove,
++                                            base::Unretained(this)));
++}
++
++void AtlasDrmHandler::OnJavascriptDisallowed() {
++  weak_ptr_factory_.InvalidateWeakPtrs();
++}
++
++void AtlasDrmHandler::HandleGetStatus(const base::ListValue& args) {
++  AllowJavascript();
++  CHECK_EQ(args.size(), 1u);
++  base::ThreadPool::PostTaskAndReplyWithResult(
++      FROM_HERE, {base::MayBlock()}, base::BindOnce(&GetStatusOnWorker),
++      base::BindOnce(&AtlasDrmHandler::ResolveResult,
++                     weak_ptr_factory_.GetWeakPtr(), args[0].Clone()));
++}
++
++void AtlasDrmHandler::HandleDetectSources(const base::ListValue& args) {
++  AllowJavascript();
++  CHECK_EQ(args.size(), 1u);
++  base::ThreadPool::PostTaskAndReplyWithResult(
++      FROM_HERE, {base::MayBlock()}, base::BindOnce(&DetectSourcesOnWorker),
++      base::BindOnce(&AtlasDrmHandler::ResolveResult,
++                     weak_ptr_factory_.GetWeakPtr(), args[0].Clone()));
++}
++
++void AtlasDrmHandler::HandleImport(const base::ListValue& args) {
++  AllowJavascript();
++  CHECK_EQ(args.size(), 2u);
++  const std::string& source_id = args[1].GetString();
++  base::ThreadPool::PostTaskAndReplyWithResult(
++      FROM_HERE, {base::MayBlock()}, base::BindOnce(&ImportOnWorker, source_id),
++      base::BindOnce(&AtlasDrmHandler::ResolveResult,
++                     weak_ptr_factory_.GetWeakPtr(), args[0].Clone()));
++}
++
++void AtlasDrmHandler::HandleRemove(const base::ListValue& args) {
++  AllowJavascript();
++  CHECK_EQ(args.size(), 2u);
++  const std::string& version = args[1].GetString();
++  base::ThreadPool::PostTaskAndReplyWithResult(
++      FROM_HERE, {base::MayBlock()}, base::BindOnce(&RemoveOnWorker, version),
++      base::BindOnce(&AtlasDrmHandler::ResolveResult,
++                     weak_ptr_factory_.GetWeakPtr(), args[0].Clone()));
++}
++
++void AtlasDrmHandler::ResolveResult(base::Value callback_id,
++                                    base::DictValue result) {
++  ResolveJavascriptCallback(callback_id, result);
++}
++
++}  // namespace settings
+diff --git a/chrome/browser/resources/settings/privacy_page/drm_browser_proxy.ts b/chrome/browser/resources/settings/privacy_page/drm_browser_proxy.ts
+new file mode 100644
+index 0000000000000..c8684e49640a1
+--- /dev/null
++++ b/chrome/browser/resources/settings/privacy_page/drm_browser_proxy.ts
+@@ -0,0 +1,76 @@
++// Copyright 2026 The Atlas Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++import {sendWithPromise} from 'chrome://resources/js/cr.js';
++
++export interface AtlasDrmStatus {
++  success: boolean;
++  installed: boolean;
++  version: string;
++  managed: boolean;
++  errorCode?: string;
++  message?: string;
++}
++
++export interface AtlasDrmSource {
++  id: string;
++  name: string;
++  version: string;
++}
++
++export interface AtlasDrmSourcesResult {
++  success: boolean;
++  sources: AtlasDrmSource[];
++  errorCode?: string;
++  message?: string;
++}
++
++export interface AtlasDrmActionResult {
++  success: boolean;
++  version?: string;
++  sourceName?: string;
++  restartRequired?: boolean;
++  errorCode?: string;
++  message?: string;
++}
++
++export interface AtlasDrmBrowserProxy {
++  getStatus(): Promise<AtlasDrmStatus>;
++  detectSources(): Promise<AtlasDrmSourcesResult>;
++  importFrom(sourceId: string): Promise<AtlasDrmActionResult>;
++  remove(version: string): Promise<AtlasDrmActionResult>;
++  restart(): void;
++}
++
++export class AtlasDrmBrowserProxyImpl implements AtlasDrmBrowserProxy {
++  getStatus() {
++    return sendWithPromise<AtlasDrmStatus>('getAtlasDrmStatus');
++  }
++
++  detectSources() {
++    return sendWithPromise<AtlasDrmSourcesResult>('detectAtlasDrmSources');
++  }
++
++  importFrom(sourceId: string) {
++    return sendWithPromise<AtlasDrmActionResult>('importAtlasDrm', sourceId);
++  }
++
++  remove(version: string) {
++    return sendWithPromise<AtlasDrmActionResult>('removeAtlasDrm', version);
++  }
++
++  restart() {
++    chrome.send('restart');
++  }
++
++  static getInstance(): AtlasDrmBrowserProxy {
++    return instance || (instance = new AtlasDrmBrowserProxyImpl());
++  }
++
++  static setInstance(obj: AtlasDrmBrowserProxy) {
++    instance = obj;
++  }
++}
++
++let instance: AtlasDrmBrowserProxy|null = null;
+diff --git a/chrome/browser/resources/settings/privacy_page/drm_page.ts b/chrome/browser/resources/settings/privacy_page/drm_page.ts
+new file mode 100644
+index 0000000000000..cefa27bc25151
+--- /dev/null
++++ b/chrome/browser/resources/settings/privacy_page/drm_page.ts
+@@ -0,0 +1,189 @@
++// Copyright 2026 The Atlas Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++import 'chrome://resources/cr_elements/cr_button/cr_button.js';
++import 'chrome://resources/cr_elements/cr_link_row/cr_link_row.js';
++import 'chrome://resources/cr_elements/cr_spinner_style.css.js';
++import 'chrome://resources/cr_elements/cr_shared_style.css.js';
++import '../settings_page/settings_subpage.js';
++import '../settings_shared.css.js';
++
++import {I18nMixin} from 'chrome://resources/cr_elements/i18n_mixin.js';
++import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
++
++import {routes} from '../route.js';
++import {Router} from '../router.js';
++import {SettingsViewMixin} from '../settings_page/settings_view_mixin.js';
++
++import type {AtlasDrmActionResult, AtlasDrmBrowserProxy, AtlasDrmSource, AtlasDrmStatus} from './drm_browser_proxy.js';
++import {AtlasDrmBrowserProxyImpl} from './drm_browser_proxy.js';
++import {getTemplate} from './drm_page.html.js';
++
++const SettingsDrmPageElementBase = SettingsViewMixin(I18nMixin(PolymerElement));
++
++export class SettingsDrmPageElement extends SettingsDrmPageElementBase {
++  static get is() {
++    return 'settings-drm-page';
++  }
++
++  static get template() {
++    return getTemplate();
++  }
++
++  static get properties() {
++    return {
++      status_: Object,
++      sources_: {
++        type: Array,
++        value: () => [],
++      },
++      busy_: {
++        type: Boolean,
++        value: false,
++      },
++      restartRequired_: {
++        type: Boolean,
++        value: false,
++      },
++      message_: {
++        type: String,
++        value: '',
++      },
++      isError_: {
++        type: Boolean,
++        value: false,
++      },
++    };
++  }
++
++  declare private status_: AtlasDrmStatus|undefined;
++  declare private sources_: AtlasDrmSource[];
++  declare private busy_: boolean;
++  declare private restartRequired_: boolean;
++  declare private message_: string;
++  declare private isError_: boolean;
++
++  private browserProxy_: AtlasDrmBrowserProxy =
++      AtlasDrmBrowserProxyImpl.getInstance();
++
++  override connectedCallback() {
++    super.connectedCallback();
++    void this.refresh_();
++  }
++
++  private async refresh_() {
++    this.busy_ = true;
++    this.message_ = '';
++    try {
++      const [status, sources] = await Promise.all([
++        this.browserProxy_.getStatus(),
++        this.browserProxy_.detectSources(),
++      ]);
++      this.status_ = status;
++      this.sources_ = sources.sources || [];
++      if (!status.success || !sources.success) {
++        this.showError_(
++            status.message || sources.message ||
++            this.i18n('atlasDrmGenericError'));
++      }
++    } catch (_error) {
++      this.showError_(this.i18n('atlasDrmGenericError'));
++    } finally {
++      this.busy_ = false;
++    }
++  }
++
++  private async onImportClick_(event: Event) {
++    const sourceId = (event.currentTarget as HTMLElement).dataset['sourceId'];
++    if (!sourceId) {
++      return;
++    }
++    this.busy_ = true;
++    this.message_ = '';
++    try {
++      const result = await this.browserProxy_.importFrom(sourceId);
++      if (!result.success) {
++        this.showError_(result.message || this.i18n('atlasDrmGenericError'));
++        return;
++      }
++      this.restartRequired_ = Boolean(result.restartRequired);
++      this.showSuccess_(this.i18n(
++          'atlasDrmImportSuccess', result.version || '',
++          result.sourceName || ''));
++      await this.reloadStatus_();
++    } catch (_error) {
++      this.showError_(this.i18n('atlasDrmGenericError'));
++    } finally {
++      this.busy_ = false;
++    }
++  }
++
++  private async onRemoveClick_() {
++    if (!this.status_?.managed || !this.status_.version) {
++      return;
++    }
++    this.busy_ = true;
++    this.message_ = '';
++    try {
++      const result: AtlasDrmActionResult =
++          await this.browserProxy_.remove(this.status_.version);
++      if (!result.success) {
++        this.showError_(result.message || this.i18n('atlasDrmGenericError'));
++        return;
++      }
++      this.restartRequired_ = Boolean(result.restartRequired);
++      this.showSuccess_(this.i18n('atlasDrmRemoveSuccess'));
++      await this.reloadStatus_();
++    } catch (_error) {
++      this.showError_(this.i18n('atlasDrmGenericError'));
++    } finally {
++      this.busy_ = false;
++    }
++  }
++
++  private async reloadStatus_() {
++    this.status_ = await this.browserProxy_.getStatus();
++  }
++
++  private onProtectedContentClick_() {
++    Router.getInstance().navigateTo(routes.SITE_SETTINGS_PROTECTED_CONTENT);
++  }
++
++  private onRestartClick_() {
++    this.browserProxy_.restart();
++  }
++
++  private showError_(message: string) {
++    this.isError_ = true;
++    this.message_ = message;
++  }
++
++  private showSuccess_(message: string) {
++    this.isError_ = false;
++    this.message_ = message;
++  }
++
++  private messageClass_(isError: boolean): string {
++    return isError ? 'message-row error' : 'message-row';
++  }
++
++  private getInstalledLabel_(status?: AtlasDrmStatus): string {
++    return status?.installed ?
++        this.i18n('atlasDrmInstalledVersion', status.version) :
++        this.i18n('atlasDrmNotInstalled');
++  }
++
++  // SettingsViewMixin implementation.
++  override focusBackButton() {
++    this.shadowRoot!.querySelector('settings-subpage')!.focusBackButton();
++  }
++}
++
++declare global {
++  interface HTMLElementTagNameMap {
++    'settings-drm-page': SettingsDrmPageElement;
++  }
++}
++
++customElements.define(SettingsDrmPageElement.is, SettingsDrmPageElement);
+diff --git a/chrome/browser/resources/settings/privacy_page/drm_page.html b/chrome/browser/resources/settings/privacy_page/drm_page.html
+new file mode 100644
+index 0000000000000..111b0b0d82216
+--- /dev/null
++++ b/chrome/browser/resources/settings/privacy_page/drm_page.html
+@@ -0,0 +1,127 @@
++<style include="cr-shared-style settings-shared cr-spinner-style">
++  .intro {
++    color: var(--cr-secondary-text-color);
++    font-size: 16px;
++    line-height: 1.5;
++    padding: 0 var(--cr-section-padding) 18px;
++  }
++
++  .card {
++    border: 1px solid var(--cr-separator-color);
++    border-radius: 12px;
++    margin: 0 var(--cr-section-padding) 18px;
++    overflow: hidden;
++  }
++
++  .card-header,
++  .source-row,
++  .message-row {
++    align-items: center;
++    display: flex;
++    gap: 16px;
++    min-height: 64px;
++    padding: 12px 16px;
++  }
++
++  .source-row + .source-row {
++    border-top: 1px solid var(--cr-separator-color);
++  }
++
++  .grow {
++    flex: 1;
++    min-width: 0;
++  }
++
++  .primary {
++    font-size: 16px;
++    font-weight: 500;
++  }
++
++  .secondary {
++    color: var(--cr-secondary-text-color);
++    font-size: 14px;
++    line-height: 1.45;
++    margin-top: 4px;
++  }
++
++  .message-row {
++    background: var(--cr-card-background-color);
++    margin: 0 var(--cr-section-padding) 18px;
++  }
++
++  .message-row.error {
++    color: var(--google-red-700);
++  }
++
++  .legal {
++    color: var(--cr-secondary-text-color);
++    font-size: 13px;
++    line-height: 1.5;
++    padding: 0 var(--cr-section-padding) 24px;
++  }
++
++  h2 {
++    margin: 0;
++    padding: 0 var(--cr-section-padding) 8px;
++  }
++
++  .spinner {
++    flex: none;
++  }
++</style>
++
++<settings-subpage page-title="$i18n{atlasDrmPageTitle}"
++    route-path$="[[routePath]]">
++  <div class="intro">$i18n{atlasDrmPageDescription}</div>
++
++  <div class="card">
++    <div class="card-header">
++      <div class="grow">
++        <div class="primary">$i18n{atlasDrmStatusTitle}</div>
++        <div class="secondary">[[getInstalledLabel_(status_)]]</div>
++      </div>
++      <div class="spinner" hidden$="[[!busy_]]"></div>
++      <cr-button hidden$="[[!status_.managed]]" disabled="[[busy_]]"
++          on-click="onRemoveClick_">
++        $i18n{atlasDrmRemoveButton}
++      </cr-button>
++    </div>
++  </div>
++
++  <cr-link-row class="hr" label="$i18n{atlasDrmProtectedContentTitle}"
++      sub-label="$i18n{atlasDrmProtectedContentDescription}"
++      on-click="onProtectedContentClick_"
++      role-description="$i18n{subpageArrowRoleDescription}">
++  </cr-link-row>
++
++  <h2>$i18n{atlasDrmSourcesTitle}</h2>
++  <div class="card">
++    <template is="dom-repeat" items="[[sources_]]">
++      <div class="source-row">
++        <div class="grow">
++          <div class="primary">[[item.name]]</div>
++          <div class="secondary">
++            $i18n{atlasDrmDetectedVersion} [[item.version]]
++          </div>
++        </div>
++        <cr-button class="action-button" disabled="[[busy_]]"
++            data-source-id$="[[item.id]]" on-click="onImportClick_">
++          $i18n{atlasDrmImportButton}
++        </cr-button>
++      </div>
++    </template>
++    <div class="source-row" hidden$="[[sources_.length]]">
++      <div class="secondary">$i18n{atlasDrmNoSources}</div>
++    </div>
++  </div>
++
++  <div class$="[[messageClass_(isError_)]]" hidden$="[[!message_]]">
++    <div class="grow">[[message_]]</div>
++    <cr-button class="action-button" hidden$="[[!restartRequired_]]"
++        on-click="onRestartClick_">
++      $i18n{atlasDrmRestartButton}
++    </cr-button>
++  </div>
++
++  <div class="legal">$i18n{atlasDrmLegalNotice}</div>
++</settings-subpage>
+
