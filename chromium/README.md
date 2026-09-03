@@ -24,6 +24,11 @@ git apply C:\Users\Axel\Desktop\NavegadorChrominium\chromium\patches\0003-atlas-
 git apply C:\Users\Axel\Desktop\NavegadorChrominium\chromium\patches\0004-atlas-product-version.patch
 git apply C:\Users\Axel\Desktop\NavegadorChrominium\chromium\patches\0005-atlas-drm-import.patch
 git apply C:\Users\Axel\Desktop\NavegadorChrominium\chromium\patches\0006-atlas-sidebar-navigation.patch
+git apply C:\Users\Axel\Desktop\NavegadorChrominium\chromium\patches\0007-atlas-sidebar-layout-and-startup.patch
+git apply C:\Users\Axel\Desktop\NavegadorChrominium\chromium\patches\0008-atlas-essentials-empty-state.patch
+git apply C:\Users\Axel\Desktop\NavegadorChrominium\chromium\patches\0009-atlas-sidebar-hover-presentation.patch
+git apply C:\Users\Axel\Desktop\NavegadorChrominium\chromium\patches\0010-atlas-revealable-titlebar.patch
+git apply C:\Users\Axel\Desktop\NavegadorChrominium\chromium\patches\0011-atlas-titlebar-animation.patch
 & C:\Users\Axel\Desktop\NavegadorChrominium\tools\chromium\apply-branding.ps1
 ```
 
@@ -85,6 +90,52 @@ e editar seu nome e cor. Com a sidebar recolhida, o botão central alterna para
 o próximo workspace. `Ctrl+Alt+Q` e `Ctrl+Alt+E` alternam para o anterior e o
 seguinte. Os grupos, suas abas e o workspace ativo são restaurados pela sessão
 nativa.
+
+O sétimo patch mantém o menu acessível quando a sidebar está recolhida e
+trata solicitações de popups antes do registro da âncora do BrowserView. Isso
+evita o `CHECK(element)` em `AppMenuButton::GetAnchor()` ao restaurar um perfil
+recolhido. O rodapé recebe posições explícitas: downloads e conta/perfil à
+esquerda, criar workspace à direita; em modo recolhido, os controles ficam
+empilhados. Conta abre a página nativa de configurações do perfil. O nome do
+workspace permanece no cabeçalho expandido, sem legenda duplicada. A largura
+mínima expandida é 224 px e os rótulos de ações não exibem marcadores `&` de
+atalhos de menu.
+
+O oitavo patch compacta o estado vazio dos Essenciais em uma ação textual
+`Adicionar essencial`, sem o título separado e o botão quadrado preenchido.
+Quando há abas fixadas, mostra o título e um `+` discreto acima da grade nativa.
+O estado acompanha inserção, remoção, seleção e fixação de abas pelo próprio
+TabStripModel; não cria uma segunda lista de atalhos nem preenche itens padrão.
+
+O nono patch sincroniza navegação, Essenciais, abas e rodapé com a largura
+exibida durante a expansão por hover. A preferência continua recolhida e a
+página não é deslocada por essa expansão temporária. O alvo usa a largura salva
+(limitada a 224–400 px), o cabeçalho conserva a altura e as sugestões do omnibox
+mantêm o painel aberto. O botão recolher continua sendo reconhecido após sua
+transferência para a toolbar, evitando reabertura imediata sob o ponteiro.
+
+O décimo patch substitui os controles transparentes sobre a página por uma
+faixa nativa de 32 px. No maximizado, uma borda de 3 px revela a faixa ao receber
+o mouse; o conteúdo e a sidebar ficam abaixo dela. No restaurado (e em modo de
+toque), permanece visível. A área livre usa `HTCAPTION` para arraste e duplo
+clique nativos; botões ocultos não recebem cliques. Fullscreen e janelas de apps
+com window-controls-overlay permanecem fora dessa alteração.
+
+O décimo primeiro patch anima a faixa superior em 180 ms ao revelar e 160 ms
+ao recolher, com curva ease-in-out e reversão a partir da posição atual. A
+mesma altura interpolada reserva espaço para página e sidebar; os botões
+deslizam com altura fixa, recortados nos limites da faixa. Movimento reduzido
+desativa a transição, e restaurar a janela encerra a animação imediatamente.
+
+Para verificar a inicialização com sidebar expandida/recolhida, em janela
+restaurada/maximizada, incluindo o aviso de recuperação de sessão:
+
+```powershell
+& .\tools\chromium\verify-sidebar-startup.ps1
+```
+
+O teste usa somente perfis temporários e deixa os logs no caminho informado.
+Não modifica o perfil pessoal nem substitui a inspeção visual do navegador.
 
 ## Streaming e conteúdo protegido
 

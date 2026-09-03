@@ -1,0 +1,518 @@
+diff --git a/chrome/browser/ui/views/frame/app_menu_button.cc b/chrome/browser/ui/views/frame/app_menu_button.cc
+index e0d817653b665..934f83694dda8 100644
+--- a/chrome/browser/ui/views/frame/app_menu_button.cc
++++ b/chrome/browser/ui/views/frame/app_menu_button.cc
+@@ -54,11 +54,21 @@ views::BubbleAnchor AppMenuButton::GetAnchor() {
+   // The app menu button is always present but might be non-visible or offscreen
+   // in certain cases (e.g. content-fullscreen). In this case, use the fallback
+   // anchor instead.
+-  auto* const elements = BrowserElementsViews::From(this);
+-  CHECK(elements);
+-  auto* const element = elements->GetElement(kFallbackPopupAnchorElementId);
+-  CHECK(element);
+-  return views::BubbleAnchor(element);
++  if (auto* const elements = BrowserElementsViews::From(this)) {
++    if (auto* const element =
++            elements->GetElement(kFallbackPopupAnchorElementId)) {
++      return views::BubbleAnchor(element);
++    }
++  }
++  // Atlas can start with its sidebar collapsed. Startup bubbles may request
++  // an anchor before BrowserView has registered its popup subregion, or while
++  // that region is not drawn. Keep a live Views anchor throughout that gap.
++  for (views::View* anchor = parent(); anchor; anchor = anchor->parent()) {
++    if (anchor->IsDrawn()) {
++      return views::BubbleAnchor(anchor);
++    }
++  }
++  return views::BubbleAnchor(this);
+ }
+ 
+ bool AppMenuButton::IsDrawn() const {
+diff --git a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
+index f86b68519a684..6c754e320fdaa 100644
+--- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
++++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
+@@ -64,8 +64,8 @@
+ #include "ui/base/l10n/l10n_util.h"
+ #include "ui/base/metadata/metadata_impl_macros.h"
+ #include "ui/base/models/image_model.h"
+-#include "ui/compositor/layer.h"
+ #include "ui/color/color_id.h"
++#include "ui/compositor/layer.h"
+ #include "ui/display/screen.h"
+ #include "ui/events/event.h"
+ #include "ui/gfx/geometry/point.h"
+@@ -155,14 +155,8 @@ VerticalTabStripRegionView::VerticalTabStripRegionView(
+   workspace_section->SetOrientation(views::LayoutOrientation::kVertical);
+   workspace_section->SetCrossAxisAlignment(views::LayoutAlignment::kStretch);
+   workspace_section->SetProperty(
+-      views::kMarginsKey,
+-      gfx::Insets::TLBR(6, region_horizontal_padding, 2,
+-                        region_horizontal_padding));
+-
+-  auto workspace_caption = std::make_unique<views::Label>(u"Workspace");
+-  workspace_caption->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+-  workspace_caption->SetEnabledColor(ui::kColorLabelForegroundSecondary);
+-  workspace_section->AddChildView(std::move(workspace_caption));
++      views::kMarginsKey, gfx::Insets::TLBR(6, region_horizontal_padding, 2,
++                                            region_horizontal_padding));
+ 
+   auto workspace_button = std::make_unique<views::LabelButton>(
+       base::BindRepeating(&VerticalTabStripRegionView::RotateAtlasWorkspace,
+@@ -173,7 +167,7 @@ VerticalTabStripRegionView::VerticalTabStripRegionView(
+   workspace_button->SetImageModel(
+       views::Button::STATE_NORMAL,
+       ui::ImageModel::FromVectorIcon(vector_icons::kFolderFlippableIcon));
+-  workspace_button->SetPreferredSize(gfx::Size(0, 32));
++  workspace_button->SetPreferredSize(gfx::Size(0, 36));
+   workspace_button->SetTooltipText(u"Alternar workspace");
+   atlas_workspace_button_ =
+       workspace_section->AddChildView(std::move(workspace_button));
+@@ -186,18 +180,17 @@ VerticalTabStripRegionView::VerticalTabStripRegionView(
+   // child previously allowed this row to absorb hundreds of vertical pixels.
+   essentials_header->SetPreferredSize(gfx::Size(0, 36));
+   essentials_header->SetProperty(
+-      views::kMarginsKey,
+-      gfx::Insets::TLBR(4, region_horizontal_padding, 0,
+-                        region_horizontal_padding));
++      views::kMarginsKey, gfx::Insets::TLBR(4, region_horizontal_padding, 0,
++                                            region_horizontal_padding));
+ 
+   auto essentials_label = std::make_unique<views::Label>(u"Essenciais");
+   essentials_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
++  essentials_label->SetEnabledColor(ui::kColorLabelForegroundSecondary);
+   essentials_label->SetProperty(
+       views::kFlexBehaviorKey,
+-      views::FlexSpecification(
+-          views::LayoutOrientation::kHorizontal,
+-          views::MinimumFlexSizeRule::kScaleToZero,
+-          views::MaximumFlexSizeRule::kUnbounded));
++      views::FlexSpecification(views::LayoutOrientation::kHorizontal,
++                               views::MinimumFlexSizeRule::kScaleToZero,
++                               views::MaximumFlexSizeRule::kUnbounded));
+   atlas_essentials_label_ =
+       essentials_header->AddChildView(std::move(essentials_label));
+ 
+@@ -205,8 +198,7 @@ VerticalTabStripRegionView::VerticalTabStripRegionView(
+   add_essential_button->SetCallback(base::BindRepeating(
+       &VerticalTabStripRegionView::AddActiveTabToAtlasEssentials,
+       base::Unretained(this)));
+-  add_essential_button->UpdateIcon(
+-      ui::ImageModel::FromVectorIcon(kAddIcon));
++  add_essential_button->UpdateIcon(ui::ImageModel::FromVectorIcon(kAddIcon));
+   add_essential_button->SetIconSize(16);
+   add_essential_button->SetCornerRadius(8.0f);
+   add_essential_button->SetTooltipText(u"Adicionar guia atual às essenciais");
+@@ -222,10 +214,9 @@ VerticalTabStripRegionView::VerticalTabStripRegionView(
+               base::Unretained(this))));
+   bottom_button_container_->SetProperty(
+       views::kFlexBehaviorKey,
+-      views::FlexSpecification(
+-          views::LayoutOrientation::kVertical,
+-          views::MinimumFlexSizeRule::kPreferred,
+-          views::MaximumFlexSizeRule::kUnbounded)
++      views::FlexSpecification(views::LayoutOrientation::kVertical,
++                               views::MinimumFlexSizeRule::kPreferred,
++                               views::MaximumFlexSizeRule::kUnbounded)
+           .WithWeight(1));
+   bottom_button_container_->SetProperty(
+       views::kMarginsKey,
+@@ -300,8 +291,7 @@ void VerticalTabStripRegionView::RotateAtlasWorkspace(const ui::Event&) {
+ }
+ 
+ void VerticalTabStripRegionView::UpdateAtlasWorkspaceState() {
+-  TabStripModel* const model =
+-      browser_view()->browser()->GetTabStripModel();
++  TabStripModel* const model = browser_view()->browser()->GetTabStripModel();
+   const std::optional<tab_groups::TabGroupId> focused_group =
+       model->GetFocusedGroup();
+ 
+@@ -324,7 +314,7 @@ void VerticalTabStripRegionView::UpdateAtlasWorkspaceState() {
+ 
+   atlas_workspace_button_->SetText(workspace_name);
+   atlas_workspace_button_->SetTooltipText(workspace_name +
+-                                           u" — alternar workspace");
++                                          u" — alternar workspace");
+ }
+ 
+ std::unique_ptr<views::LabelButton>
+@@ -806,8 +796,6 @@ void VerticalTabStripRegionView::RequestCollapse(bool collapse) {
+       ->Start(TabStripAnimations::kVerticalTabStrip, motion);
+ }
+ 
+-
+-
+ VerticalTabStripRegionView::RegionViewFocusListener::RegionViewFocusListener(
+     VerticalTabStripRegionView* region_view)
+     : region_view_(region_view) {}
+diff --git a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h
+index 91184587832d3..f8cc2a9201c97 100644
+--- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h
++++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h
+@@ -66,7 +66,7 @@ class VerticalTabStripRegionView final
+ 
+   // TODO(crbug.com/465833741): Replace constant with derived value based on
+   // caption buttons.
+-  static constexpr int kUncollapsedMinWidth = 126;
++  static constexpr int kUncollapsedMinWidth = 224;
+   // TODO(crbug.com/465832180): Replace constant based width final max width for
+   // view.
+   static constexpr int kUncollapsedMaxWidth = 400;
+diff --git a/chrome/browser/ui/views/tabs/shared/tab_strip_flat_edge_button.cc b/chrome/browser/ui/views/tabs/shared/tab_strip_flat_edge_button.cc
+index 52dd469d6d3c7..15a5713e86e05 100644
+--- a/chrome/browser/ui/views/tabs/shared/tab_strip_flat_edge_button.cc
++++ b/chrome/browser/ui/views/tabs/shared/tab_strip_flat_edge_button.cc
+@@ -15,6 +15,7 @@
+ #include "ui/compositor/layer.h"
+ #include "ui/gfx/canvas.h"
+ #include "ui/gfx/geometry/skia_conversions.h"
++#include "ui/gfx/text_utils.h"
+ #include "ui/views/actions/action_view_interface.h"
+ #include "ui/views/animation/ink_drop.h"
+ #include "ui/views/background.h"
+@@ -67,9 +68,9 @@ class TabStripFlatEdgeButtonActionViewInterface
+ }  // namespace
+ 
+ TabStripFlatEdgeButton::TabStripFlatEdgeButton() {
+-  ConfigureInkDrop(
+-      this, std::make_unique<views::RoundRectHighlightPathGenerator>(
+-                gfx::Insets(), GetButtonCornerRadii()));
++  ConfigureInkDrop(this,
++                   std::make_unique<views::RoundRectHighlightPathGenerator>(
++                       gfx::Insets(), GetButtonCornerRadii()));
+   ConfigureToolbarInkdropForRefresh2023(
+       this, kColorTabStripControlButtonInkDrop,
+       kColorTabStripControlButtonInkDropRipple);
+@@ -258,10 +259,13 @@ void TabStripFlatEdgeButton::SetIconSize(int icon_size) {
+ }
+ 
+ void TabStripFlatEdgeButton::SetLabelText(const std::u16string& text) {
+-  if (label_text_ == text) {
++  // Action labels are shared with menus and can contain mnemonic markers.
++  // A sidebar button displays plain text, not "Nova &guia".
++  const std::u16string display_text = gfx::RemoveAccelerator(text);
++  if (label_text_ == display_text) {
+     return;
+   }
+-  label_text_ = text;
++  label_text_ = display_text;
+   UpdateLabel(width() > CalculatePreferredSize({}).width());
+ }
+ 
+diff --git a/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_bottom_container.cc b/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_bottom_container.cc
+index 01f08cbfc662a..c93a2f4a0781c 100644
+--- a/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_bottom_container.cc
++++ b/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_bottom_container.cc
+@@ -4,6 +4,8 @@
+ 
+ #include "chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_bottom_container.h"
+ 
++#include <algorithm>
++
+ #include "base/functional/bind.h"
+ #include "base/strings/string_number_conversions.h"
+ #include "chrome/app/vector_icons/vector_icons.h"
+@@ -61,17 +63,9 @@ VerticalTabStripBottomContainer::VerticalTabStripBottomContainer(
+   new_tab_button_->SetLabelText(l10n_util::GetStringUTF16(IDS_NEW_TAB));
+   new_tab_button_->SetCornerRadius(10.0f);
+ 
+-  // Keep the Atlas utility actions pinned to the bottom of the sidebar. The
+-  // spacer absorbs all unused height, so the footer does not move as tabs are
+-  // opened or closed.
+-  atlas_footer_spacer_ = AddChildView(std::make_unique<views::View>());
+-  atlas_footer_spacer_->SetProperty(
+-      views::kFlexBehaviorKey,
+-      views::FlexSpecification(
+-          views::LayoutOrientation::kVertical,
+-          views::MinimumFlexSizeRule::kScaleToZero,
+-          views::MaximumFlexSizeRule::kUnbounded)
+-          .WithWeight(1));
++  // Layout() owns these bounds. Nested unbounded flex spacers used to leave
++  // the footer floating halfway up the sidebar and stretch narrow controls.
++  new_tab_button_->SetProperty(views::kViewIgnoredByLayoutKey, true);
+ 
+   // Zen-style utility footer: quiet icon-only actions anchored to the two
+   // ends of a single row instead of full-width stacked buttons.
+@@ -86,21 +80,22 @@ VerticalTabStripBottomContainer::VerticalTabStripBottomContainer(
+         chrome::ShowDownloads(browser);
+       },
+       browser_));
+-  downloads_button->UpdateIcon(
+-      ui::ImageModel::FromVectorIcon(kDownloadIcon));
++  downloads_button->UpdateIcon(ui::ImageModel::FromVectorIcon(kDownloadIcon));
+   downloads_button->SetTooltipText(
+       l10n_util::GetStringUTF16(IDS_SHOW_DOWNLOADS));
+   atlas_downloads_button_ =
+       utility_row->AddChildView(std::move(downloads_button));
+ 
+-  atlas_utility_spacer_ = utility_row->AddChildView(
+-      std::make_unique<views::View>());
+-  atlas_utility_spacer_->SetProperty(
+-      views::kFlexBehaviorKey,
+-      views::FlexSpecification(
+-          views::LayoutOrientation::kHorizontal,
+-          views::MinimumFlexSizeRule::kScaleToZero,
+-          views::MaximumFlexSizeRule::kUnbounded));
++  auto profile_button = std::make_unique<TopContainerButton>();
++  profile_button->SetCallback(base::BindRepeating(
++      [](BrowserWindowInterface* browser, const ui::Event&) {
++        chrome::ShowSettingsSubPage(browser, "people");
++      },
++      browser_));
++  profile_button->UpdateIcon(
++      ui::ImageModel::FromVectorIcon(vector_icons::kAccountCircleIcon));
++  profile_button->SetTooltipText(u"Conta e perfil");
++  atlas_profile_button_ = utility_row->AddChildView(std::move(profile_button));
+ 
+   // The active workspace is represented by one small dot only when at least
+   // one workspace exists. Clicking it cycles through workspaces and Geral.
+@@ -110,8 +105,8 @@ VerticalTabStripBottomContainer::VerticalTabStripBottomContainer(
+       base::Unretained(this)));
+   current_workspace_button->UpdateIcon(
+       ui::ImageModel::FromVectorIcon(kCircleFilledIcon));
+-  atlas_current_workspace_button_ = utility_row->AddChildView(
+-      std::move(current_workspace_button));
++  atlas_current_workspace_button_ =
++      utility_row->AddChildView(std::move(current_workspace_button));
+ 
+   auto add_workspace_button = std::make_unique<TopContainerButton>();
+   add_workspace_button->SetCallback(base::BindRepeating(
+@@ -123,6 +118,10 @@ VerticalTabStripBottomContainer::VerticalTabStripBottomContainer(
+       utility_row->AddChildView(std::move(add_workspace_button));
+ 
+   atlas_utility_row_ = AddChildView(std::move(utility_row));
++  atlas_utility_row_->SetProperty(views::kViewIgnoredByLayoutKey, true);
++  for (views::View* button : atlas_utility_row_->children()) {
++    button->SetProperty(views::kViewIgnoredByLayoutKey, true);
++  }
+ 
+   UpdateAtlasWorkspaceState();
+   OnCollapseStateChanged(state_controller->GetCollapseState());
+@@ -134,6 +133,51 @@ VerticalTabStripBottomContainer::VerticalTabStripBottomContainer(
+ 
+ VerticalTabStripBottomContainer::~VerticalTabStripBottomContainer() = default;
+ 
++int VerticalTabStripBottomContainer::GetAtlasFooterHeight() const {
++  if (!collapsed_) {
++    return 36;
++  }
++  return 36 * (atlas_current_workspace_button_->GetVisible() ? 4 : 3);
++}
++
++gfx::Size VerticalTabStripBottomContainer::GetMinimumSize() const {
++  return gfx::Size(32, 36 + 12 + GetAtlasFooterHeight());
++}
++
++gfx::Size VerticalTabStripBottomContainer::CalculatePreferredSize(
++    const views::SizeBounds& available_size) const {
++  return GetMinimumSize();
++}
++
++void VerticalTabStripBottomContainer::Layout(PassKey) {
++  LayoutSuperclass<views::FlexLayoutView>(this);
++  const int button_width = std::min(32, width());
++  new_tab_button_->SetBounds(collapsed_ ? (width() - button_width) / 2 : 0, 0,
++                             collapsed_ ? button_width : width(),
++                             std::min(36, height()));
++
++  const int footer_height = GetAtlasFooterHeight();
++  atlas_utility_row_->SetBounds(0, std::max(48, height() - footer_height),
++                                width(), footer_height);
++  if (collapsed_) {
++    int y = 0;
++    for (auto* button :
++         {atlas_downloads_button_.get(), atlas_profile_button_.get(),
++          atlas_current_workspace_button_.get(),
++          atlas_add_workspace_button_.get()}) {
++      if (button->GetVisible()) {
++        button->SetBounds((width() - button_width) / 2, y, button_width, 32);
++        y += 36;
++      }
++    }
++  } else {
++    atlas_downloads_button_->SetBounds(0, 2, button_width, 32);
++    atlas_profile_button_->SetBounds(36, 2, button_width, 32);
++    atlas_add_workspace_button_->SetBounds(std::max(0, width() - button_width),
++                                           2, button_width, 32);
++  }
++}
++
+ void VerticalTabStripBottomContainer::CreateAtlasWorkspace(const ui::Event&) {
+   TabStripModel* const model = browser_->GetTabStripModel();
+   chrome::NewTab(browser_, NewTabTypes::kNewTabCommand);
+@@ -173,6 +217,9 @@ void VerticalTabStripBottomContainer::UpdateAtlasWorkspaceState() {
+   if (focused_group.has_value()) {
+     TabGroup* const tab_group =
+         model->group_model()->GetTabGroup(*focused_group);
++    if (!tab_group) {
++      return;
++    }
+     workspace_name = tab_group->visual_data()->title();
+     if (workspace_name.empty()) {
+       workspace_name = u"Workspace";
+@@ -184,14 +231,13 @@ void VerticalTabStripBottomContainer::UpdateAtlasWorkspaceState() {
+   }
+ 
+   atlas_current_workspace_button_->SetVisible(
+-      !model->group_model()->ListTabGroups().empty());
++      collapsed_ && !model->group_model()->ListTabGroups().empty());
+   atlas_current_workspace_button_->SetTooltipText(
+-      focused_group.has_value()
+-          ? workspace_name + u" — alternar workspace"
+-          : u"Geral — alternar workspace");
++      focused_group.has_value() ? workspace_name + u" — alternar workspace"
++                                : u"Geral — alternar workspace");
++  PreferredSizeChanged();
+ }
+ 
+-
+ bool VerticalTabStripBottomContainer::IsPositionInWindowCaption(
+     const gfx::Point& point) {
+   for (views::View* child : children()) {
+@@ -227,19 +273,17 @@ void VerticalTabStripBottomContainer::OnNewTabButtonContextMenuClosed() {
+ }
+ 
+ void VerticalTabStripBottomContainer::UpdateButtonStyles(bool collapsed) {
++  collapsed_ = collapsed;
+   SetOrientation(views::LayoutOrientation::kVertical);
+   SetCrossAxisAlignment(views::LayoutAlignment::kStretch);
+ 
+-  // The footer always remains a fixed-height horizontal row. It must never
+-  // participate in the vertical flex that fills the tab area.
+-  atlas_utility_row_->SetOrientation(views::LayoutOrientation::kHorizontal);
+-  atlas_utility_spacer_->SetVisible(true);
+-
+   const gfx::Insets button_insets = GetLayoutInsets(
+       collapsed ? LayoutInset::VERTICAL_TAB_STRIP_BOTTOM_BUTTON_COLLAPSED
+                 : LayoutInset::VERTICAL_TAB_STRIP_BOTTOM_BUTTON_UNCOLLAPSED);
+   new_tab_button_->SetInsets(button_insets);
+   new_tab_button_->SetShouldShowLabel(!collapsed);
++  UpdateAtlasWorkspaceState();
++  InvalidateLayout();
+ }
+ 
+ BEGIN_METADATA(VerticalTabStripBottomContainer)
+diff --git a/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_bottom_container.h b/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_bottom_container.h
+index 5ab6af0df3cbc..3b4ba0b8e2de7 100644
+--- a/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_bottom_container.h
++++ b/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_bottom_container.h
+@@ -49,6 +49,11 @@ class VerticalTabStripBottomContainer : public views::FlexLayoutView {
+   // Refreshes the Atlas workspace selector after focus or visual data changes.
+   void UpdateAtlasWorkspaceState();
+ 
++  void Layout(PassKey) override;
++  gfx::Size GetMinimumSize() const override;
++  gfx::Size CalculatePreferredSize(
++      const views::SizeBounds& available_size) const override;
++
+  private:
+   void OnNewTabButtonContextMenuWillShow();
+   void OnNewTabButtonContextMenuClosed();
+@@ -57,16 +62,17 @@ class VerticalTabStripBottomContainer : public views::FlexLayoutView {
+   void RotateAtlasWorkspace(const ui::Event& event);
+ 
+   void UpdateButtonStyles(bool collapsed);
++  int GetAtlasFooterHeight() const;
+ 
+   raw_ptr<BrowserWindowInterface> browser_ = nullptr;
+   raw_ptr<actions::ActionItem> root_action_item_ = nullptr;
+   raw_ptr<TabStripFlatEdgeButton> new_tab_button_ = nullptr;
+-  raw_ptr<views::View> atlas_footer_spacer_ = nullptr;
+   raw_ptr<TopContainerButton> atlas_current_workspace_button_ = nullptr;
+   raw_ptr<TopContainerButton> atlas_add_workspace_button_ = nullptr;
+   raw_ptr<views::FlexLayoutView> atlas_utility_row_ = nullptr;
+-  raw_ptr<views::View> atlas_utility_spacer_ = nullptr;
+   raw_ptr<TopContainerButton> atlas_downloads_button_ = nullptr;
++  raw_ptr<TopContainerButton> atlas_profile_button_ = nullptr;
++  bool collapsed_ = false;
+   base::CallbackListSubscription collapsed_state_change_subscription_;
+   base::CallbackListSubscription new_tab_button_pressed_subscription_;
+   std::optional<base::CallbackListSubscription>
+diff --git a/chrome/browser/ui/views/toolbar/toolbar_view.cc b/chrome/browser/ui/views/toolbar/toolbar_view.cc
+index 857ffdd60f83b..b099904d392ef 100644
+--- a/chrome/browser/ui/views/toolbar/toolbar_view.cc
++++ b/chrome/browser/ui/views/toolbar/toolbar_view.cc
+@@ -182,8 +182,8 @@ DEFINE_UI_CLASS_PROPERTY_KEY(bool, kActionItemUnderlineIndicatorKey, false)
+ 
+ namespace {
+ 
+-constexpr int kAtlasSidebarCollapsedHeaderHeight = 52;
+-constexpr int kAtlasSidebarExpandedHeaderHeight = 96;
++constexpr int kAtlasSidebarCollapsedHeaderHeight = 84;
++constexpr int kAtlasSidebarExpandedHeaderHeight = 88;
+ constexpr int kAtlasSidebarExpandedMinimumWidth = 224;
+ 
+ // Gets the display mode for a given browser.
+@@ -1377,13 +1377,12 @@ gfx::Size ToolbarView::CalculatePreferredSize(
+   if (IsAtlasSidebarToolbar()) {
+     const auto* controller =
+         tabs::VerticalTabStripStateController::From(browser_);
+-    return gfx::Size(
+-        controller && controller->IsCollapsed()
+-            ? VerticalTabStripRegionView::kCollapsedWidth
+-            : tabs::kVerticalTabStripDefaultUncollapsedWidth,
+-        controller && controller->IsCollapsed()
+-            ? kAtlasSidebarCollapsedHeaderHeight
+-            : kAtlasSidebarExpandedHeaderHeight);
++    return gfx::Size(controller && controller->IsCollapsed()
++                         ? VerticalTabStripRegionView::kCollapsedWidth
++                         : tabs::kVerticalTabStripDefaultUncollapsedWidth,
++                     controller && controller->IsCollapsed()
++                         ? kAtlasSidebarCollapsedHeaderHeight
++                         : kAtlasSidebarExpandedHeaderHeight);
+   }
+ 
+   gfx::Size size;
+@@ -1787,9 +1786,9 @@ void ToolbarView::LayoutAtlasSidebarToolbar() {
+   constexpr int kOuterInset = 8;
+   constexpr int kControlGap = 4;
+   constexpr int kNavigationRowHeight = 44;
+-  constexpr int kControlSize = 36;
+-  constexpr int kOmniboxTop = 48;
+-  constexpr int kOmniboxHeight = 40;
++  constexpr int kControlSize = 32;
++  constexpr int kOmniboxTop = 44;
++  constexpr int kOmniboxHeight = 36;
+   constexpr int kExpandedControlsMinimumWidth = 208;
+ 
+   // FlexLayout is intentionally bypassed in this mode. Clear the bounds of
+@@ -1811,11 +1810,10 @@ void ToolbarView::LayoutAtlasSidebarToolbar() {
+ 
+   const auto* controller =
+       tabs::VerticalTabStripStateController::From(browser_);
+-  const bool is_collapsed =
+-      (controller && controller->IsCollapsed()) ||
+-      width() < kExpandedControlsMinimumWidth;
++  const bool is_collapsed = (controller && controller->IsCollapsed()) ||
++                            width() < kExpandedControlsMinimumWidth;
+   if (app_menu_button_) {
+-    app_menu_button_->SetVisible(!is_collapsed);
++    app_menu_button_->SetVisible(true);
+   }
+   if (atlas_sidebar_toggle_button_) {
+     atlas_sidebar_toggle_button_->SetVisible(true);
+@@ -1834,9 +1832,12 @@ void ToolbarView::LayoutAtlasSidebarToolbar() {
+   if (is_collapsed) {
+     if (atlas_sidebar_toggle_button_) {
+       atlas_sidebar_toggle_button_->SetBounds(
+-          std::max(0, (width() - kControlSize) / 2),
+-          (kAtlasSidebarCollapsedHeaderHeight - kControlSize) / 2,
+-          kControlSize, kControlSize);
++          std::max(0, (width() - kControlSize) / 2), 6, kControlSize,
++          kControlSize);
++    }
++    if (app_menu_button_) {
++      app_menu_button_->SetBounds(std::max(0, (width() - kControlSize) / 2), 44,
++                                  kControlSize, kControlSize);
+     }
+     return;
+   }
+@@ -2037,7 +2038,6 @@ ReloadControl* ToolbarView::GetReloadButton() {
+   return reload_;
+ }
+ 
+-
+ ToolbarButton* ToolbarView::GetDownloadButton() {
+   return pinned_toolbar_actions_container_
+              ? pinned_toolbar_actions_container_->GetButtonFor(

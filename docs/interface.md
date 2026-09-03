@@ -28,23 +28,58 @@ corresponder à referência, evitando duplicar o sistema de cores do navegador.
 ## Estrutura
 
 ```text
-┌──────── lateral Atlas ────────┬──────── barra de endereço ────────────────┐
-│ controles da lateral          │ voltar · avançar · recarregar · endereço │
-│ atalhos fixados pelo usuário  ├───────────────────────────────────────────┤
-│ grupos/espaços                │                                           │
-│ abas abertas                  │              conteúdo da página           │
-│                               │                                           │
-│ nova aba e ferramentas        │                                           │
-└───────────────────────────────┴───────────────────────────────────────────┘
+┌────── lateral Atlas ──────┬───────────────────────────────────────────────┐
+│ menu · recolher · ← → ↻   │                                               │
+│ endereço                 │                                               │
+│ workspace ativo          │                                               │
+│ Essenciais           +   │               conteúdo da página              │
+│ abas abertas             │                                               │
+│ + Nova guia              │                                               │
+│                          │                                               │
+│ downloads · conta     +  │                                               │
+└──────────────────────────┴───────────────────────────────────────────────┘
 ```
 
 - largura inicial expandida: `240 px`, redimensionável pelo usuário;
+- largura mínima expandida: `224 px`; lateral recolhida: `56 px`;
 - estado inicial: expandido, com possibilidade de recolher;
 - abas fixadas representam atalhos e começam vazias;
 - atalhos aparecem somente após ação explícita do usuário;
 - abas comuns preservam título, favicon, áudio, descarte, grupos e arrastar/soltar;
 - o tema inicial é escuro, mas continua configurável;
 - o estado de largura e recolhimento usa as preferências nativas do perfil.
+
+No modo recolhido, expansão e menu permanecem no topo. Downloads, conta e
+criação de workspace são empilhados no rodapé; o seletor de workspace só
+aparece quando há grupos. O rodapé não usa um espaçador flexível interno:
+suas posições dependem dos limites do contêiner, evitando botões no meio da
+lateral. Essenciais começam vazios e a lista nativa de abas mantém rolagem.
+
+Quando os Essenciais estão vazios, a seção mostra apenas `+ Adicionar essencial`,
+em uma linha de 32 px e sem fundo preenchido permanente. A ação fixa a guia
+atual. Ao existir pelo menos uma guia fixada, a linha passa a mostrar o título
+`Essenciais` com um botão `+` compacto, seguido pela grade nativa. Fechar ou
+desafixar o último item restaura a apresentação vazia. O botão tem foco de
+teclado e nome acessível; fica desabilitado se a guia ativa já estiver fixada.
+
+Ao passar o mouse sobre a sidebar recolhida, o painel sobrepõe temporariamente
+a página na largura salva, sem mudar a preferência de recolhimento. Os controles
+mudam juntos para a apresentação expandida quando há pelo menos 224 px. O
+cabeçalho conserva 88 px nos dois estados; menus de sugestões mantêm a sidebar
+aberta enquanto estão em uso.
+
+No Windows, a faixa dos controles de janela ocupa 32 px acima da sidebar e da
+página, em vez de sobrepor conteúdo. Maximizada, a janela mostra uma borda de
+ativação de 3 px: passar o mouse revela a faixa, e sair dela recolhe novamente.
+Restaurada, a faixa permanece disponível. Seu espaço livre funciona como área
+de arraste nativo; minimizar, maximizar/restaurar e fechar preservam as ações
+do Windows. No modo de toque a faixa permanece visível, e fullscreen continua
+sem essa faixa.
+
+A abertura da faixa usa 180 ms e o recolhimento 160 ms, com aceleração e
+desaceleração suaves. A página e a sidebar acompanham a altura animada; os
+ícones mantêm o tamanho. Inverter o hover reverte o movimento da posição atual,
+sem reiniciar do extremo. A preferência de movimento reduzido é respeitada.
 
 ## Entrega 1
 

@@ -1,0 +1,143 @@
+diff --git a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
+index 6c754e320fdaa..2ca7271506aad 100644
+--- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
++++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
+@@ -70,6 +70,7 @@
+ #include "ui/events/event.h"
+ #include "ui/gfx/geometry/point.h"
+ #include "ui/views/background.h"
++#include "ui/views/border.h"
+ #include "ui/views/controls/button/label_button.h"
+ #include "ui/views/controls/focus_ring.h"
+ #include "ui/views/controls/label.h"
+@@ -178,7 +179,7 @@ VerticalTabStripRegionView::VerticalTabStripRegionView(
+   essentials_header->SetCrossAxisAlignment(views::LayoutAlignment::kCenter);
+   // Keep the section header in the document flow. A cross-axis-unbounded
+   // child previously allowed this row to absorb hundreds of vertical pixels.
+-  essentials_header->SetPreferredSize(gfx::Size(0, 36));
++  essentials_header->SetPreferredSize(gfx::Size(0, 32));
+   essentials_header->SetProperty(
+       views::kMarginsKey, gfx::Insets::TLBR(4, region_horizontal_padding, 0,
+                                             region_horizontal_padding));
+@@ -194,17 +195,32 @@ VerticalTabStripRegionView::VerticalTabStripRegionView(
+   atlas_essentials_label_ =
+       essentials_header->AddChildView(std::move(essentials_label));
+ 
+-  auto add_essential_button = std::make_unique<TabStripFlatEdgeButton>();
++  auto add_essential_button = std::make_unique<views::LabelButton>();
+   add_essential_button->SetCallback(base::BindRepeating(
+       &VerticalTabStripRegionView::AddActiveTabToAtlasEssentials,
+       base::Unretained(this)));
+-  add_essential_button->UpdateIcon(ui::ImageModel::FromVectorIcon(kAddIcon));
+-  add_essential_button->SetIconSize(16);
+-  add_essential_button->SetCornerRadius(8.0f);
+-  add_essential_button->SetTooltipText(u"Adicionar guia atual às essenciais");
++  add_essential_button->SetImageModel(
++      views::Button::STATE_NORMAL,
++      ui::ImageModel::FromVectorIcon(kAddIcon,
++                                     ui::kColorLabelForegroundSecondary, 16));
++  add_essential_button->SetEnabledTextColors(
++      ui::kColorLabelForegroundSecondary);
++  add_essential_button->SetTextColor(views::Button::STATE_HOVERED,
++                                     ui::kColorLabelForeground);
++  add_essential_button->SetImageLabelSpacing(8);
++  add_essential_button->SetBorder(
++      views::CreateEmptyBorder(gfx::Insets::VH(0, 8)));
++  add_essential_button->SetFocusBehavior(views::View::FocusBehavior::ALWAYS);
++  views::FocusRing::Install(add_essential_button.get());
++  add_essential_button->SetTooltipText(
++      u"Fixar a guia atual nos Essenciais, disponíveis em todos os workspaces");
++  add_essential_button->GetViewAccessibility().SetName(
++      u"Adicionar guia aos Essenciais");
+   atlas_add_essential_button_ =
+       essentials_header->AddChildView(std::move(add_essential_button));
+   atlas_essentials_header_ = AddChildView(std::move(essentials_header));
++  tab_strip_model()->AddObserver(this);
++  UpdateAtlasEssentialsState();
+ 
+   bottom_button_container_ =
+       AddChildView(std::make_unique<VerticalTabStripBottomContainer>(
+@@ -1233,6 +1249,41 @@ void VerticalTabStripRegionView::OnOmniboxPopupVisibilityChanged(bool is_open) {
+   }
+ }
+ 
++void VerticalTabStripRegionView::UpdateAtlasEssentialsState() {
++  const auto* model = tab_strip_model();
++  const bool has_essentials = model->IndexOfFirstNonPinnedTab() > 0;
++  atlas_essentials_label_->SetVisible(has_essentials);
++  atlas_add_essential_button_->SetText(has_essentials ? u""
++                                                      : u"Adicionar essencial");
++  atlas_add_essential_button_->SetHorizontalAlignment(
++      has_essentials ? gfx::ALIGN_CENTER : gfx::ALIGN_LEFT);
++  atlas_add_essential_button_->SetPreferredSize(
++      gfx::Size(has_essentials ? 32 : 0, 32));
++  atlas_add_essential_button_->SetProperty(
++      views::kFlexBehaviorKey,
++      views::FlexSpecification(views::LayoutOrientation::kHorizontal,
++                               views::MinimumFlexSizeRule::kPreferred,
++                               has_essentials
++                                   ? views::MaximumFlexSizeRule::kPreferred
++                                   : views::MaximumFlexSizeRule::kUnbounded));
++  const int active_index = model->active_index();
++  atlas_add_essential_button_->SetEnabled(model->ContainsIndex(active_index) &&
++                                          !model->IsTabPinned(active_index));
++}
++
++void VerticalTabStripRegionView::OnTabStripModelChanged(
++    TabStripModel* model,
++    const TabStripModelChange& change,
++    const TabStripSelectionChange& selection) {
++  UpdateAtlasEssentialsState();
++}
++
++void VerticalTabStripRegionView::OnTabPinnedStateChanged(
++    tabs::TabInterface* tab,
++    int index) {
++  UpdateAtlasEssentialsState();
++}
++
+ void VerticalTabStripRegionView::OnActiveTabChanged(
+     const tabs::TabInterface* active_tab) {
+   BaseTabStripRegionView::OnActiveTabChanged(active_tab);
+diff --git a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h
+index f8cc2a9201c97..7d7193315353a 100644
+--- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h
++++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h
+@@ -15,6 +15,7 @@
+ #include "chrome/browser/ui/animation/browser_animation_types.h"
+ #include "chrome/browser/ui/omnibox/omnibox_tab_helper.h"
+ #include "chrome/browser/ui/tabs/tab_data.h"
++#include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
+ #include "chrome/browser/ui/tabs/vertical_tab_strip_state.h"
+ #include "chrome/browser/ui/tabs/vertical_tab_strip_state_controller.h"
+ #include "chrome/browser/ui/views/frame/base_tab_strip_region_view.h"
+@@ -58,6 +59,7 @@ class VerticalTabStripRegionView final
+     : public BaseTabStripRegionView,
+       public views::ResizeAreaDelegate,
+       public OmniboxTabHelper::Observer,
++      public TabStripModelObserver,
+       public tabs::VerticalTabStripStateController::Delegate {
+   METADATA_HEADER(VerticalTabStripRegionView, BaseTabStripRegionView)
+ 
+@@ -204,6 +206,12 @@ class VerticalTabStripRegionView final
+   void HandleMouseExited();
+ 
+   void AddActiveTabToAtlasEssentials(const ui::Event& event);
++  void UpdateAtlasEssentialsState();
++  void OnTabStripModelChanged(
++      TabStripModel* model,
++      const TabStripModelChange& change,
++      const TabStripSelectionChange& selection) override;
++  void OnTabPinnedStateChanged(tabs::TabInterface* tab, int index) override;
+   void RotateAtlasWorkspace(const ui::Event& event);
+   void UpdateAtlasWorkspaceState();
+ 
+@@ -257,7 +265,7 @@ class VerticalTabStripRegionView final
+   raw_ptr<views::LabelButton> atlas_workspace_button_ = nullptr;
+   raw_ptr<views::FlexLayoutView> atlas_essentials_header_ = nullptr;
+   raw_ptr<views::Label> atlas_essentials_label_ = nullptr;
+-  raw_ptr<TabStripFlatEdgeButton> atlas_add_essential_button_ = nullptr;
++  raw_ptr<views::LabelButton> atlas_add_essential_button_ = nullptr;
+   raw_ptr<VerticalTabStripBottomContainer> bottom_button_container_ = nullptr;
+   raw_ptr<views::View> gemini_button_ = nullptr;
+   raw_ptr<views::ResizeArea> resize_area_ = nullptr;

@@ -1,0 +1,272 @@
+diff --git a/chrome/browser/ui/views/frame/layout/browser_view_tabbed_layout_impl.cc b/chrome/browser/ui/views/frame/layout/browser_view_tabbed_layout_impl.cc
+index 3a3d1a6a490df..7bcc81c6bdd0c 100644
+--- a/chrome/browser/ui/views/frame/layout/browser_view_tabbed_layout_impl.cc
++++ b/chrome/browser/ui/views/frame/layout/browser_view_tabbed_layout_impl.cc
+@@ -623,7 +623,7 @@ gfx::Size BrowserViewTabbedLayoutImpl::GetMinimumMainAreaSize(
+ 
+   int width = std::max({toolbar_size.width(), bookmark_bar_size.width(),
+                         infobar_container_size.width(),
+-                            kContentsContainerMinimumWidth});
++                        kContentsContainerMinimumWidth});
+   const int height = toolbar_size.height() + bookmark_bar_size.height() +
+                      infobar_container_size.height() + contents_size.height();
+ 
+@@ -781,8 +781,13 @@ BrowserViewTabbedLayoutImpl::CalculateProposedLayout(
+       }
+ 
+       const int vertical_tab_strip_hover_width =
+-          std::max(0, tabs::kVerticalTabStripDefaultUncollapsedWidth -
+-                          horizontal_layout.vertical_tab_strip_width) *
++          std::max(
++              0,
++              std::clamp(
++                  views().vertical_tab_strip_region_view->uncollapsed_width(),
++                  VerticalTabStripRegionView::kUncollapsedMinWidth,
++                  VerticalTabStripRegionView::kUncollapsedMaxWidth) -
++                  horizontal_layout.vertical_tab_strip_width) *
+           vertical_tab_strip_animation.expand_on_hover_width;
+ 
+       int vertical_tab_strip_width =
+diff --git a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
+index 2ca7271506aad..0c9311ed713ba 100644
+--- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
++++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
+@@ -336,6 +336,7 @@ void VerticalTabStripRegionView::UpdateAtlasWorkspaceState() {
+ std::unique_ptr<views::LabelButton>
+ VerticalTabStripRegionView::TakeAtlasSidebarToggleButton() {
+   auto button = top_button_container_->TakeCollapseButton();
++  atlas_sidebar_toggle_button_ = button.get();
+   top_button_container_->SetVisible(false);
+   return button;
+ }
+@@ -505,6 +506,15 @@ void VerticalTabStripRegionView::RemovedFromWidget() {
+ }
+ 
+ void VerticalTabStripRegionView::Layout(PassKey) {
++  // During hover, the persisted state remains collapsed. All sidebar children
++  // must use the same visual state, and only reveal labels once they fit.
++  const bool visually_collapsed = width() < kUncollapsedMinWidth;
++  atlas_workspace_section_->SetVisible(!visually_collapsed);
++  atlas_essentials_header_->SetVisible(!visually_collapsed);
++  if (tab_strip_view()) {
++    tab_strip_view()->SetCollapsedState(visually_collapsed);
++  }
++  bottom_button_container_->SetCollapsedForLayout(visually_collapsed);
+   LayoutSuperclass<views::AccessiblePaneView>(this);
+ 
+   // Manually position the resize area as it overlaps views handled by the flex
+@@ -944,6 +954,9 @@ bool VerticalTabStripRegionView::IsFrameActive() const {
+ }
+ 
+ bool VerticalTabStripRegionView::IsCollapseButtonHovered() const {
++  if (atlas_sidebar_toggle_button_) {
++    return atlas_sidebar_toggle_button_->IsMouseHovered();
++  }
+   if (top_button_container_ && top_button_container_->GetCollapseButton()) {
+     return top_button_container_->GetCollapseButton()->IsMouseHovered();
+   }
+@@ -1240,8 +1253,11 @@ void VerticalTabStripRegionView::UnregisterExpandOnHoverLock(
+ void VerticalTabStripRegionView::OnOmniboxPopupVisibilityChanged(bool is_open) {
+   if (is_open) {
+     if (!omnibox_open_lock_) {
++      // The omnibox now lives inside the sidebar. Keep it open while its
++      // suggestions are in use, rather than collapsing its parent underneath
++      // it.
+       omnibox_open_lock_ =
+-          GetExpandOnHoverLock(ExpandOnHoverLockType::kForceCollapse);
++          GetExpandOnHoverLock(ExpandOnHoverLockType::kKeepExpanded);
+       UpdateExpandOnHoverState();
+     }
+   } else {
+diff --git a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h
+index 7d7193315353a..4781a3d2d024a 100644
+--- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h
++++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h
+@@ -260,6 +260,7 @@ class VerticalTabStripRegionView final
+       std::optional<tab_groups::TabGroupId> old_focused_group_id) override;
+ 
+   raw_ptr<VerticalTabStripTopContainer> top_button_container_ = nullptr;
++  raw_ptr<views::LabelButton> atlas_sidebar_toggle_button_ = nullptr;
+   raw_ptr<views::Separator> top_button_separator_ = nullptr;
+   raw_ptr<views::FlexLayoutView> atlas_workspace_section_ = nullptr;
+   raw_ptr<views::LabelButton> atlas_workspace_button_ = nullptr;
+diff --git a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view_browsertest.cc b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view_browsertest.cc
+index ef0c99e3f55d0..faabfa2671151 100644
+--- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view_browsertest.cc
++++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view_browsertest.cc
+@@ -28,6 +28,7 @@
+ #include "chrome/browser/ui/views/animations/tab_strip_animations.h"
+ #include "chrome/browser/ui/views/frame/browser_view.h"
+ #include "chrome/browser/ui/views/frame/custom_corners_background.h"
++#include "chrome/browser/ui/views/frame/multi_contents_view.h"
+ #include "chrome/browser/ui/views/frame/top_container_view.h"
+ #include "chrome/browser/ui/views/tabs/common/pinned_tab_container_view.h"
+ #include "chrome/browser/ui/views/tabs/common/root_tab_collection_node.h"
+@@ -37,6 +38,7 @@
+ #include "chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_focus_swipe_controller.h"
+ #include "chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container.h"
+ #include "chrome/browser/ui/views/test/vertical_tabs_browser_test_mixin.h"
++#include "chrome/browser/ui/views/toolbar/toolbar_view.h"
+ #include "chrome/common/pref_names.h"
+ #include "chrome/grit/generated_resources.h"
+ #include "chrome/test/base/in_process_browser_test.h"
+@@ -772,8 +774,7 @@ IN_PROC_BROWSER_TEST_F(VerticalTabStripRegionViewTest,
+   EXPECT_EQ(std::nullopt, region_view()->GetFocusedTabIndex());
+ }
+ 
+-IN_PROC_BROWSER_TEST_F(VerticalTabStripRegionViewTest,
+-                       SplitTabsShareSpace) {
++IN_PROC_BROWSER_TEST_F(VerticalTabStripRegionViewTest, SplitTabsShareSpace) {
+   TabStripModel* tab_strip_model = browser()->GetTabStripModel();
+   // Add split tabs.
+   content::WebContents* contents1 = AppendTab();
+@@ -1209,6 +1210,74 @@ IN_PROC_BROWSER_TEST_F(VerticalTabStripRegionViewTest,
+       base::test::RunUntil([&]() { return view->is_expanded_on_hover(); }));
+ }
+ 
++IN_PROC_BROWSER_TEST_F(VerticalTabStripRegionViewTest,
++                       AtlasHoverUsesSavedWidthAndRevealsNavigation) {
++  auto* browser_view = BrowserView::GetBrowserViewForBrowser(browser());
++  auto* toolbar = browser_view->toolbar();
++  state_controller()->SetExpandOnHoverEnabled(true);
++
++  for (int expanded_width : {224, 240, 320, 400}) {
++    SCOPED_TRACE(expanded_width);
++    SetupExpandedVerticalTabStrip();
++    state_controller()->SetUncollapsedWidth(expanded_width);
++    state_controller()->RequestCollapse(true);
++    ASSERT_TRUE(base::test::RunUntil([&]() {
++      return state_controller()->IsCollapsed() && !IsAnimatingSize();
++    }));
++    RunScheduledLayouts();
++    EXPECT_FALSE(toolbar->location_bar_view()->GetVisible());
++    const auto content_bounds =
++        browser_view->multi_contents_view()->GetBoundsInScreen();
++
++    auto keep_expanded = region_view()->GetExpandOnHoverLock(
++        ExpandOnHoverLockType::kKeepExpanded);
++    ASSERT_TRUE(base::test::RunUntil([&]() {
++      return region_view()->is_expanded_on_hover() && !IsAnimatingSize();
++    }));
++    RunScheduledLayouts();
++    EXPECT_TRUE(state_controller()->IsCollapsed());
++    EXPECT_EQ(expanded_width, region_view()->width());
++    EXPECT_EQ(expanded_width, toolbar->width());
++    EXPECT_TRUE(toolbar->location_bar_view()->GetVisible());
++    EXPECT_EQ(content_bounds,
++              browser_view->multi_contents_view()->GetBoundsInScreen());
++
++    // A higher-priority lock models leaving the temporary panel without
++    // relying on the test machine's physical pointer position.
++    auto force_collapse = region_view()->GetExpandOnHoverLock(
++        ExpandOnHoverLockType::kForceCollapse);
++    ASSERT_TRUE(base::test::RunUntil([&]() {
++      return !region_view()->is_expanded_on_hover() && !IsAnimatingSize();
++    }));
++    RunScheduledLayouts();
++    EXPECT_EQ(VerticalTabStripRegionView::kCollapsedWidth,
++              region_view()->width());
++    EXPECT_FALSE(toolbar->location_bar_view()->GetVisible());
++    EXPECT_EQ(expanded_width, state_controller()->GetUncollapsedWidth());
++    keep_expanded.reset();
++  }
++}
++
++IN_PROC_BROWSER_TEST_F(VerticalTabStripRegionViewTest,
++                       AtlasOmniboxSuggestionsKeepHoverOpen) {
++  state_controller()->RequestCollapse(true);
++  ASSERT_TRUE(base::test::RunUntil([&]() {
++    return state_controller()->IsCollapsed() && !IsAnimatingSize();
++  }));
++  auto* observer = static_cast<OmniboxTabHelper::Observer*>(region_view());
++  observer->OnOmniboxPopupVisibilityChanged(true);
++  ASSERT_TRUE(base::test::RunUntil([&]() {
++    return region_view()->is_expanded_on_hover() && !IsAnimatingSize();
++  }));
++  RunScheduledLayouts();
++  EXPECT_TRUE(state_controller()->IsCollapsed());
++  EXPECT_TRUE(BrowserView::GetBrowserViewForBrowser(browser())
++                  ->toolbar()
++                  ->location_bar_view()
++                  ->GetVisible());
++  observer->OnOmniboxPopupVisibilityChanged(false);
++}
++
+ IN_PROC_BROWSER_TEST_F(VerticalTabStripRegionViewTest,
+                        ExpandOnHoverEnabledChanged) {
+   // Fully collapse the tabstrip.
+@@ -2013,7 +2082,8 @@ IN_PROC_BROWSER_TEST_F(VerticalTabStripFocusSwipeTest,
+   EXPECT_EQ(std::nullopt, tab_strip_model()->GetFocusedGroup());
+ }
+ 
+-// TODO(crbug.com/546848427): Fix wall-clock timing race with kGestureResetTimeout.
++// TODO(crbug.com/546848427): Fix wall-clock timing race with
++// kGestureResetTimeout.
+ IN_PROC_BROWSER_TEST_F(VerticalTabStripFocusSwipeTest,
+                        DISABLED_SwipeTriggersOnlyOncePerGesture) {
+   EnterVerticalTabsMode();
+diff --git a/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_bottom_container.cc b/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_bottom_container.cc
+index c93a2f4a0781c..985c07169b959 100644
+--- a/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_bottom_container.cc
++++ b/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_bottom_container.cc
+@@ -260,6 +260,12 @@ void VerticalTabStripBottomContainer::OnCollapseStateChanged(
+   UpdateButtonStyles(state != tabs::VerticalTabStripCollapseState::kExpanded);
+ }
+ 
++void VerticalTabStripBottomContainer::SetCollapsedForLayout(bool collapsed) {
++  if (collapsed_ != collapsed) {
++    UpdateButtonStyles(collapsed);
++  }
++}
++
+ void VerticalTabStripBottomContainer::OnNewTabButtonContextMenuWillShow() {
+   BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser_);
+   CHECK(browser_view);
+diff --git a/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_bottom_container.h b/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_bottom_container.h
+index 3b4ba0b8e2de7..94d71e607f586 100644
+--- a/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_bottom_container.h
++++ b/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_bottom_container.h
+@@ -45,6 +45,7 @@ class VerticalTabStripBottomContainer : public views::FlexLayoutView {
+   bool IsPositionInWindowCaption(const gfx::Point& point);
+ 
+   void OnCollapseStateChanged(tabs::VerticalTabStripCollapseState state);
++  void SetCollapsedForLayout(bool collapsed);
+ 
+   // Refreshes the Atlas workspace selector after focus or visual data changes.
+   void UpdateAtlasWorkspaceState();
+diff --git a/chrome/browser/ui/views/toolbar/toolbar_view.cc b/chrome/browser/ui/views/toolbar/toolbar_view.cc
+index b099904d392ef..2645358387dfc 100644
+--- a/chrome/browser/ui/views/toolbar/toolbar_view.cc
++++ b/chrome/browser/ui/views/toolbar/toolbar_view.cc
+@@ -182,7 +182,7 @@ DEFINE_UI_CLASS_PROPERTY_KEY(bool, kActionItemUnderlineIndicatorKey, false)
+ 
+ namespace {
+ 
+-constexpr int kAtlasSidebarCollapsedHeaderHeight = 84;
++constexpr int kAtlasSidebarCollapsedHeaderHeight = 88;
+ constexpr int kAtlasSidebarExpandedHeaderHeight = 88;
+ constexpr int kAtlasSidebarExpandedMinimumWidth = 224;
+ 
+@@ -1789,7 +1789,6 @@ void ToolbarView::LayoutAtlasSidebarToolbar() {
+   constexpr int kControlSize = 32;
+   constexpr int kOmniboxTop = 44;
+   constexpr int kOmniboxHeight = 36;
+-  constexpr int kExpandedControlsMinimumWidth = 208;
+ 
+   // FlexLayout is intentionally bypassed in this mode. Clear the bounds of
+   // toolbar-only actions so they cannot overlap the page when the sidebar is
+@@ -1808,10 +1807,10 @@ void ToolbarView::LayoutAtlasSidebarToolbar() {
+     overflow_button_->SetVisible(false);
+   }
+ 
+-  const auto* controller =
+-      tabs::VerticalTabStripStateController::From(browser_);
+-  const bool is_collapsed = (controller && controller->IsCollapsed()) ||
+-                            width() < kExpandedControlsMinimumWidth;
++  // Hover expands the sidebar without changing its persisted collapsed state.
++  // Match the region's actual width instead of hiding navigation during hover.
++  const bool is_collapsed =
++      width() < VerticalTabStripRegionView::kUncollapsedMinWidth;
+   if (app_menu_button_) {
+     app_menu_button_->SetVisible(true);
+   }

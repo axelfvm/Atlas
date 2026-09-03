@@ -1,0 +1,358 @@
+diff --git a/chrome/browser/ui/views/frame/browser_caption_button_container_win.cc b/chrome/browser/ui/views/frame/browser_caption_button_container_win.cc
+index e61bbcef96fa4..870be65d3c6a4 100644
+--- a/chrome/browser/ui/views/frame/browser_caption_button_container_win.cc
++++ b/chrome/browser/ui/views/frame/browser_caption_button_container_win.cc
+@@ -117,6 +117,12 @@ int BrowserCaptionButtonContainer::NonClientHitTest(
+   DCHECK(HitTestPoint(point))
+       << "should only be called with a point inside this view's bounds";
+ 
++  // The hidden titlebar is only a thin hover target, never invisible window
++  // controls. Let Views deliver mouse-enter events to this strip.
++  if (ShouldAutoHideAtlasTitlebar() && !atlas_caption_buttons_revealed_) {
++    return HTCLIENT;
++  }
++
+   // | WCO | Win11 | Caption Button    | Output                |
+   // |-----+-------+-------------------+-----------------------|
+   // | No  | -     | All               | Original mapped value |
+@@ -158,7 +164,8 @@ int BrowserCaptionButtonContainer::NonClientHitTest(
+ }
+ 
+ void BrowserCaptionButtonContainer::OnWindowControlsOverlayEnabledChanged() {
+-  if (frame_view_->GetBrowserView()->IsWindowControlsOverlayEnabled()) {
++  if (frame_view_->ShouldUseAtlasTitlebar() ||
++      frame_view_->GetBrowserView()->IsWindowControlsOverlayEnabled()) {
+     SetBackground(
+         views::CreateSolidBackground(frame_view_->GetTitlebarColor()));
+ 
+@@ -170,12 +177,14 @@ void BrowserCaptionButtonContainer::OnWindowControlsOverlayEnabledChanged() {
+   // covered while their non-client hit targets remain active.
+   SetPaintToLayer();
+   layer()->SetFillsBoundsOpaquely(
++      frame_view_->ShouldUseAtlasTitlebar() ||
+       frame_view_->GetBrowserView()->IsWindowControlsOverlayEnabled());
+   UpdateButtonToolTipsForWindowControlsOverlay();
+ }
+ 
+ void BrowserCaptionButtonContainer::OnThemeChanged() {
+-  if (frame_view_->GetBrowserView()->IsWindowControlsOverlayEnabled()) {
++  if (frame_view_->ShouldUseAtlasTitlebar() ||
++      frame_view_->GetBrowserView()->IsWindowControlsOverlayEnabled()) {
+     SetBackground(
+         views::CreateSolidBackground(frame_view_->GetTitlebarColor()));
+   }
+@@ -203,6 +212,7 @@ void BrowserCaptionButtonContainer::AddedToWidget() {
+   // mode where the controls were clickable but visually absent.
+   SetPaintToLayer();
+   layer()->SetFillsBoundsOpaquely(
++      frame_view_->ShouldUseAtlasTitlebar() ||
+       frame_view_->GetBrowserView()->IsWindowControlsOverlayEnabled());
+ 
+   if (frame_view_->GetBrowserView()->IsWindowControlsOverlayEnabled()) {
+@@ -212,6 +222,9 @@ void BrowserCaptionButtonContainer::AddedToWidget() {
+ }
+ 
+ void BrowserCaptionButtonContainer::RemovedFromWidget() {
++  if (mouse_watcher_) {
++    mouse_watcher_->Stop();
++  }
+   DCHECK(widget_observation_.IsObserving());
+   widget_observation_.Reset();
+ }
+@@ -223,18 +236,35 @@ void BrowserCaptionButtonContainer::OnWidgetBoundsChanged(
+ }
+ 
+ void BrowserCaptionButtonContainer::MouseMovedOutOfHost() {
++  if (!ShouldAutoHideAtlasTitlebar()) {
++    return;
++  }
+   atlas_caption_buttons_revealed_ = false;
+-  UpdateAtlasCaptionButtonOpacity();
++  UpdateButtons();
++  frame_view_->InvalidateLayout();
++  frame_view_->GetBrowserView()->InvalidateLayout();
++}
++
++void BrowserCaptionButtonContainer::OnMouseEntered(
++    const ui::MouseEvent& event) {
++  views::View::OnMouseEntered(event);
++  OnCaptionButtonMouseEntered();
++}
++
++bool BrowserCaptionButtonContainer::ShouldAutoHideAtlasTitlebar() const {
++  return frame_view_->ShouldUseAtlasTitlebar() && frame_view_->IsMaximized() &&
++         !ui::TouchUiController::Get()->touch_ui();
+ }
+ 
+ void BrowserCaptionButtonContainer::OnCaptionButtonMouseEntered() {
+-  if (!frame_view_->IsMaximized() ||
+-      !frame_view_->GetBrowserView()->ShouldDrawVerticalTabStrip()) {
++  if (!ShouldAutoHideAtlasTitlebar() || atlas_caption_buttons_revealed_) {
+     return;
+   }
+ 
+   atlas_caption_buttons_revealed_ = true;
+-  UpdateAtlasCaptionButtonOpacity();
++  UpdateButtons();
++  frame_view_->InvalidateLayout();
++  frame_view_->GetBrowserView()->InvalidateLayout();
+ 
+   if (!mouse_watcher_) {
+     mouse_watcher_ = std::make_unique<views::MouseWatcher>(
+@@ -244,37 +274,42 @@ void BrowserCaptionButtonContainer::OnCaptionButtonMouseEntered() {
+   mouse_watcher_->Start(GetWidget()->GetNativeWindow());
+ }
+ 
+-void BrowserCaptionButtonContainer::UpdateAtlasCaptionButtonOpacity() {
+-  const bool should_auto_hide =
+-      frame_view_->IsMaximized() &&
+-      frame_view_->GetBrowserView()->ShouldDrawVerticalTabStrip();
+-  const float opacity =
+-      !should_auto_hide || atlas_caption_buttons_revealed_ ? 1.0f : 0.0f;
++void BrowserCaptionButtonContainer::UpdateAtlasTitlebarAppearance() {
++  // Hidden controls are removed from hit testing in UpdateButtons(), instead
++  // of remaining clickable underneath transparent pixels over web content.
+   for (WindowsCaptionButton* button :
+        {minimize_button_, maximize_button_, restore_button_, close_button_}) {
+-    button->layer()->SetOpacity(opacity);
++    button->layer()->SetOpacity(1.0f);
++  }
++  if (frame_view_->ShouldUseAtlasTitlebar()) {
++    SetBackground(
++        views::CreateSolidBackground(frame_view_->GetTitlebarColor()));
++    if (layer()) {
++      layer()->SetFillsBoundsOpaquely(true);
++    }
+   }
+ }
+ 
+ void BrowserCaptionButtonContainer::UpdateButtons() {
+-  minimize_button_->SetVisible(frame_view_->GetBrowserView()->CanMinimize());
+-
+   const bool is_maximized = frame_view_->IsMaximized();
+-  const bool can_maximize = frame_view_->GetBrowserView()->CanMaximize();
+-  restore_button_->SetVisible(is_maximized && can_maximize);
+-  maximize_button_->SetVisible(!is_maximized && can_maximize);
+-
+-  close_button_->SetVisible(true);
+-
+-  if (!is_maximized) {
++  const bool auto_hide = ShouldAutoHideAtlasTitlebar();
++  if (!auto_hide) {
+     atlas_caption_buttons_revealed_ = true;
+     if (mouse_watcher_) {
+       mouse_watcher_->Stop();
+     }
+-  } else if (frame_view_->GetBrowserView()->ShouldDrawVerticalTabStrip()) {
++  } else if (!atlas_was_auto_hiding_) {
+     atlas_caption_buttons_revealed_ = false;
+   }
+-  UpdateAtlasCaptionButtonOpacity();
++  atlas_was_auto_hiding_ = auto_hide;
++  const bool show_buttons = !auto_hide || atlas_caption_buttons_revealed_;
++  const bool can_maximize = frame_view_->GetBrowserView()->CanMaximize();
++  minimize_button_->SetVisible(show_buttons &&
++                               frame_view_->GetBrowserView()->CanMinimize());
++  restore_button_->SetVisible(show_buttons && is_maximized && can_maximize);
++  maximize_button_->SetVisible(show_buttons && !is_maximized && can_maximize);
++  close_button_->SetVisible(show_buttons);
++  UpdateAtlasTitlebarAppearance();
+ 
+   // In touch mode, windows cannot be taken out of fullscreen or tiled mode, so
+   // the maximize/restore button should be disabled, unless the window is not
+diff --git a/chrome/browser/ui/views/frame/browser_caption_button_container_win.h b/chrome/browser/ui/views/frame/browser_caption_button_container_win.h
+index 3e0374d80183a..2268f32c2d07a 100644
+--- a/chrome/browser/ui/views/frame/browser_caption_button_container_win.h
++++ b/chrome/browser/ui/views/frame/browser_caption_button_container_win.h
+@@ -47,6 +47,7 @@ class BrowserCaptionButtonContainer : public views::View,
+   void AddedToWidget() override;
+   void RemovedFromWidget() override;
+   void OnThemeChanged() override;
++  void OnMouseEntered(const ui::MouseEvent& event) override;
+ 
+   // views::WidgetObserver:
+   void OnWidgetBoundsChanged(views::Widget* widget,
+@@ -63,7 +64,8 @@ class BrowserCaptionButtonContainer : public views::View,
+   void UpdateButtons();
+ 
+   void OnCaptionButtonMouseEntered();
+-  void UpdateAtlasCaptionButtonOpacity();
++  void UpdateAtlasTitlebarAppearance();
++  bool ShouldAutoHideAtlasTitlebar() const;
+ 
+   // Sets caption button's accessible name as its tooltip when it's in a PWA
+   // with window-controls-overlay display override and resets it otherwise. In
+@@ -81,6 +83,7 @@ class BrowserCaptionButtonContainer : public views::View,
+       widget_observation_{this};
+   std::unique_ptr<views::MouseWatcher> mouse_watcher_;
+   bool atlas_caption_buttons_revealed_ = false;
++  bool atlas_was_auto_hiding_ = false;
+ 
+   base::CallbackListSubscription subscription_ =
+       ui::TouchUiController::Get()->RegisterCallback(
+diff --git a/chrome/browser/ui/views/frame/browser_frame_view_win.cc b/chrome/browser/ui/views/frame/browser_frame_view_win.cc
+index cd652ce5fb0e4..872ccac8625a2 100644
+--- a/chrome/browser/ui/views/frame/browser_frame_view_win.cc
++++ b/chrome/browser/ui/views/frame/browser_frame_view_win.cc
+@@ -78,8 +78,6 @@ constexpr int kIconTitleSpacing = 5;
+ 
+ }  // namespace
+ 
+-
+-
+ ///////////////////////////////////////////////////////////////////////////////
+ // BrowserFrameViewWin, public:
+ 
+@@ -165,6 +163,17 @@ bool BrowserFrameViewWin::CaptionButtonsOnLeadingEdge() const {
+ }
+ 
+ int BrowserFrameViewWin::GetTopInset(bool restored) const {
++  if (caption_button_container_ && ShouldUseAtlasTitlebar()) {
++    // Reserve real non-client space for the titlebar, including its small
++    // activation strip when hidden. Both page and sidebar start below it.
++    constexpr int kAtlasTitlebarHeight = 32;
++    constexpr int kAtlasRevealStripHeight = 3;
++    const bool revealed =
++        restored || !caption_button_container_->ShouldAutoHideAtlasTitlebar() ||
++        caption_button_container_->atlas_caption_buttons_revealed_;
++    return (restored ? 1 : WindowTopY()) +
++           (revealed ? kAtlasTitlebarHeight : kAtlasRevealStripHeight);
++  }
+   if (GetBrowserView()->GetTabStripVisible()) {
+     return TopAreaHeight(restored);
+   }
+@@ -458,6 +467,13 @@ bool BrowserFrameViewWin::IsMaximized() const {
+   return browser_widget()->IsMaximized();
+ }
+ 
++bool BrowserFrameViewWin::ShouldUseAtlasTitlebar() const {
++  return GetBrowserView()->ShouldDrawVerticalTabStrip() &&
++         !GetBrowserView()->GetIsWebAppType() &&
++         !GetBrowserView()->IsWindowControlsOverlayEnabled() &&
++         !browser_widget()->IsFullscreen();
++}
++
+ ///////////////////////////////////////////////////////////////////////////////
+ // BrowserFrameViewWin, views::View overrides:
+ 
+@@ -477,7 +493,6 @@ void BrowserFrameViewWin::Layout(PassKey) {
+   LayoutSuperclass<BrowserFrameView>(this);
+ }
+ 
+-
+ ///////////////////////////////////////////////////////////////////////////////
+ // BrowserFrameViewWin, private:
+ 
+@@ -582,6 +597,9 @@ int BrowserFrameViewWin::WindowTopY() const {
+ }
+ 
+ int BrowserFrameViewWin::CaptionButtonsRegionWidth() const {
++  if (ShouldUseAtlasTitlebar()) {
++    return caption_button_container_->GetPreferredSize().width();
++  }
+   return caption_button_container_->size().width();
+ }
+ 
+@@ -734,6 +752,14 @@ void BrowserFrameViewWin::LayoutCaptionButtons() {
+       !browser_widget()->IsFullscreen() ||
+       GetBrowserView()->IsWindowControlsOverlayEnabled());
+ 
++  if (ShouldUseAtlasTitlebar()) {
++    // The container's unused horizontal space already hit-tests as HTCAPTION,
++    // providing native drag-to-restore, moving and double-click maximize.
++    caption_button_container_->SetBounds(0, WindowTopY(), width(),
++                                         GetTopInset(false) - WindowTopY());
++    return;
++  }
++
+   const gfx::Size preferred_size =
+       caption_button_container_->GetPreferredSize();
+ 
+diff --git a/chrome/browser/ui/views/frame/browser_frame_view_win.h b/chrome/browser/ui/views/frame/browser_frame_view_win.h
+index e731b2c4c161f..f8bbf907f3b9f 100644
+--- a/chrome/browser/ui/views/frame/browser_frame_view_win.h
++++ b/chrome/browser/ui/views/frame/browser_frame_view_win.h
+@@ -60,6 +60,7 @@ class BrowserFrameViewWin : public BrowserFrameView, public TabIconViewModel {
+   ui::ImageModel GetFaviconForTabIconView() override;
+ 
+   bool IsMaximized() const;
++  bool ShouldUseAtlasTitlebar() const;
+ 
+   // Returns the y coordinate for the top of the frame, which in maximized mode
+   // is the top of the screen and in restored mode is 1 pixel below the top of
+diff --git a/chrome/browser/ui/views/frame/browser_frame_view_win_interactive_uitest.cc b/chrome/browser/ui/views/frame/browser_frame_view_win_interactive_uitest.cc
+index b91c2faf729b6..cbea671f597d3 100644
+--- a/chrome/browser/ui/views/frame/browser_frame_view_win_interactive_uitest.cc
++++ b/chrome/browser/ui/views/frame/browser_frame_view_win_interactive_uitest.cc
+@@ -2,12 +2,20 @@
+ // Use of this source code is governed by a BSD-style license that can be
+ // found in the LICENSE file.
+ 
++#include "chrome/browser/ui/views/frame/browser_frame_view_win.h"
++
++#include "base/test/run_until.h"
+ #include "chrome/browser/ui/browser_element_identifiers.h"
++#include "chrome/browser/ui/tabs/vertical_tab_strip_state_controller.h"
+ #include "chrome/browser/ui/ui_features.h"
++#include "chrome/browser/ui/views/frame/browser_caption_button_container_win.h"
+ #include "chrome/browser/ui/views/frame/browser_view.h"
++#include "chrome/browser/ui/views/frame/browser_widget.h"
+ #include "chrome/test/interaction/interactive_browser_test.h"
+ #include "content/public/test/browser_test.h"
++#include "ui/base/hit_test.h"
+ #include "ui/base/interaction/element_tracker.h"
++#include "ui/events/event.h"
+ #include "ui/events/keycodes/keyboard_codes.h"
+ 
+ namespace {
+@@ -29,4 +37,50 @@ IN_PROC_BROWSER_TEST_F(BrowserFrameViewWinInteractiveUiTest,
+                   WaitForShow(kSystemMenuRestoreItemElementId));
+ }
+ 
++IN_PROC_BROWSER_TEST_F(BrowserFrameViewWinInteractiveUiTest,
++                       AtlasTitlebarReservesSpaceAndKeepsNativeDragRegion) {
++  auto* browser_view = BrowserView::GetBrowserViewForBrowser(browser());
++  auto* frame = static_cast<BrowserFrameViewWin*>(browser_view->GetFrameView());
++  auto* widget = browser_view->browser_widget();
++  tabs::VerticalTabStripStateController::From(browser())
++      ->SetVerticalTabsEnabled(true);
++  auto* caption = const_cast<BrowserCaptionButtonContainer*>(
++      frame->caption_button_container_for_testing());
++
++  widget->Restore();
++  ASSERT_TRUE(base::test::RunUntil([&]() { return !widget->IsMaximized(); }));
++  RunScheduledLayouts();
++  EXPECT_EQ(32, caption->height());
++  EXPECT_EQ(frame->GetBoundsForClientView().y(), caption->bounds().bottom());
++  EXPECT_EQ(HTCAPTION, caption->NonClientHitTest(gfx::Point(20, 16)));
++
++  widget->Maximize();
++  ASSERT_TRUE(base::test::RunUntil([&]() { return widget->IsMaximized(); }));
++  // Exercise the callbacks without depending on the physical mouse position.
++  static_cast<views::MouseWatcherListener*>(caption)->MouseMovedOutOfHost();
++  RunScheduledLayouts();
++  EXPECT_EQ(3, caption->height());
++  EXPECT_EQ(HTCLIENT, caption->NonClientHitTest(gfx::Point(20, 1)));
++  for (auto* button : caption->children()) {
++    EXPECT_FALSE(button->GetVisible());
++  }
++
++  ui::MouseEvent entered(ui::EventType::kMouseEntered, gfx::PointF(20, 1),
++                         gfx::PointF(20, 1), base::TimeTicks::Now(), 0, 0);
++  static_cast<views::View*>(caption)->OnMouseEntered(entered);
++  RunScheduledLayouts();
++  EXPECT_EQ(32, caption->height());
++  EXPECT_EQ(frame->GetBoundsForClientView().y(), caption->bounds().bottom());
++  EXPECT_EQ(HTCAPTION, caption->NonClientHitTest(gfx::Point(20, 16)));
++
++  static_cast<views::MouseWatcherListener*>(caption)->MouseMovedOutOfHost();
++  RunScheduledLayouts();
++  EXPECT_EQ(3, caption->height());
++  widget->Restore();
++  ASSERT_TRUE(base::test::RunUntil([&]() { return !widget->IsMaximized(); }));
++  RunScheduledLayouts();
++  EXPECT_EQ(32, caption->height());
++  EXPECT_EQ(frame->GetBoundsForClientView().y(), caption->bounds().bottom());
++}
++
+ }  // namespace

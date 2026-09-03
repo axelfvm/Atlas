@@ -1,6 +1,6 @@
 {
   "product": "Atlas",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "channel": "preview",
   "chromium": {
     "version": "154.0.8031.0",
